@@ -4,6 +4,19 @@ from buildModel import *
 from tqdm import tqdm
 import numpy as np
 from tensorflow.keras.callbacks import History
+import json
+
+# Load preprocessed dataframe
+df = transform_target()
+
+# Generate windows, and load train input data, train target data, and test input data
+windows_dict = create_windows(
+    df[features].values,  # input matrix
+    df['Close'].values.reshape(df.shape[0], -1),
+    df['Date'].values,
+    df['target'].values
+)
+del df
 
 
 def model_fit_predict():
@@ -16,18 +29,8 @@ def model_fit_predict():
     :param test_input: test input matrix
     :return: np.array of predictions
     """
-    # Load preprocessed dataframe
-    df = transform_target()
 
-    # Generate windows, and load train input data, train target data, and test input data
-    windows_dict = create_windows(
-        df[features].values,  # input matrix
-        df['Close'].values.reshape(df.shape[0], -1),
-        df['Date'].values,
-        df['target'].values
-    )
     X, y, test_input = windows_dict['X'], windows_dict['y'], windows_dict['X_test']
-    del df
 
     # Predictions are stored in a list
     predictions = []
@@ -67,3 +70,33 @@ def model_fit_predict():
             progress_bar.update(1)
 
     return np.asarray(predictions)
+
+
+def save_results(predictions):
+    """
+    Save results and parameters to results/ directory
+    :param windows_dict: dictionary resulting from splitWindows.create_windows
+    :param predictions: array of predictions from model_fit_predict()
+    """
+    df_res = pd.DataFrame(
+        np.vstack(
+            (
+                windows_dict['dates_test'].reshape(-1),
+                predictions.reshape(-1),
+                windows_dict['closes_test'].reshape(-1)
+            )
+        ).T,
+        columns=['Date', 'Pred', 'Real']
+    ).set_index('Date')
+
+    if not os.path.isdir('results/'):
+        os.mkdir('results/')
+
+    # Save results dataframe
+    df_res.to_csv(f'results/{name}.csv', index=False)
+
+    # Save model parameters to .json
+    with open(f'results/{name}.json', 'w') as fp:
+        json.dump(desc, fp, indent=4, sort_keys=False)
+
+    return 1

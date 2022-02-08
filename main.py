@@ -7,17 +7,17 @@ from modelFitPredict import *
 
 def main():
 
-    # PREPROCESSING
+    # Preprocessing
     # icsa_shift()
     # technical_indicators()
     # concatenate_dfs()
 
-    # TRAINING THE MODEL, SAVING PREDICTIONS FOR EACH WINDOW
+    # Training the model, saving predictions for each window
     predictions = model_fit_predict()
-    print(
-        len(predictions),
-        predictions[-5:]
-    )
+
+    # Saving results and parameters
+    save_results(predictions)
+
     return 0
 
 if __name__ == "__main__":

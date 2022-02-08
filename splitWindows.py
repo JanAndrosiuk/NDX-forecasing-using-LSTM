@@ -40,7 +40,7 @@ def create_windows(input_matrix, closes, dates, targets):
             X_buf.append(X_transformed)
             y_buf.append([targets[j].copy()])
             dates_train_buf.append(dates[j])
-            closes_test_buf.append(closes[j].copy())
+            closes_train_buf.append(closes[j].copy())
 
         # for test periods:
         for k in range(i, i+test_period, 1):
@@ -65,10 +65,10 @@ def create_windows(input_matrix, closes, dates, targets):
         'y': np.asarray(y),
         'X_test': np.asarray(X_test),
         'y_test': np.asarray(y_test),
-        'closes_X': np.asarray(closes_train),
-        'closes_y': np.asarray(closes_test),
-        'dates_X': np.asarray(dates_train),
-        'dates_y': np.asarray(dates_test),
+        'closes_train': np.asarray(closes_train),
+        'closes_test': np.asarray(closes_test),
+        'dates_train': np.asarray(dates_train),
+        'dates_test': np.asarray(dates_test),
         'scalers': np.asarray(scalers)
     }
     return windows_dict

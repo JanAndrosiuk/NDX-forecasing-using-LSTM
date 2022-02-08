@@ -1,5 +1,5 @@
 import time
-name = f'Model_{time.strftime("%Y%m%d-%H%M%S")}'
+name = f'model_{time.strftime("%Y-%m-%d_%H-%M")}'
 
 # below one can choose which parameters will be included in the model training
 # it can be either Technical Indicators data, OHLCV data, or just closing prices of an index
