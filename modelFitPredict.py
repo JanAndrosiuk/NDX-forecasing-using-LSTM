@@ -9,9 +9,9 @@ import json
 # Load preprocessed dataframe
 df = transform_target()
 
-# Generate windows, and load train input data, train target data, and test input data
+# Generate windows and load train input data, train target data, and test input data
 windows_dict = create_windows(
-    df[features].values,  # input matrix
+    df[features].values,  # input matrix (refers to parameters.py)
     df['Close'].values.reshape(df.shape[0], -1),
     df['Date'].values,
     df['target'].values
@@ -24,9 +24,6 @@ def model_fit_predict():
     Training example was implemented according to machine-learning-mastery forum
     The function takes data from the dictionary returned from splitWindows.create_windows function
     https://machinelearningmastery.com/stateful-stateless-lstm-time-series-forecasting-python/
-    :param X: input matrix
-    :param y: target vector
-    :param test_input: test input matrix
     :return: np.array of predictions
     """
 
@@ -35,7 +32,7 @@ def model_fit_predict():
     # Predictions are stored in a list
     predictions = []
 
-    with tqdm(total=X.shape[0], desc="Training model, saving predictions") as progress_bar:
+    with tqdm(total=X.shape[0], desc="Training the model, saving predictions") as progress_bar:
 
         # Save model History in order to check error data
         history = History()
@@ -53,6 +50,7 @@ def model_fit_predict():
             #     verbose=0, shuffle=False, validation_split=0.1,
             #     callbacks=[history]
             # )
+            # print(X[i].shape, X[i].dtype, y[i].shape, y[i].dtype)
             for e in range(epochs):
                 current_model.fit(
                     X[i], y[i],
@@ -64,7 +62,7 @@ def model_fit_predict():
 
             # PREDICT and save results
             predictions.append(
-                current_model.predict(test_input[i], batch_size=batch, verbose=0)
+                current_model.predict(test_input[i], batch_size=batch_test, verbose=0)
             )
 
             progress_bar.update(1)
@@ -75,7 +73,6 @@ def model_fit_predict():
 def save_results(predictions):
     """
     Save results and parameters to results/ directory
-    :param windows_dict: dictionary resulting from splitWindows.create_windows
     :param predictions: array of predictions from model_fit_predict()
     """
     df_res = pd.DataFrame(
@@ -93,10 +90,10 @@ def save_results(predictions):
         os.mkdir('results/')
 
     # Save results dataframe
-    df_res.to_csv(f'results/{name}.csv', index=False)
+    df_res.to_csv(f'results/{name}_results.csv', index=False)
 
     # Save model parameters to .json
-    with open(f'results/{name}.json', 'w') as fp:
+    with open(f'results/{name}_parameters.json', 'w') as fp:
         json.dump(desc, fp, indent=4, sort_keys=False)
 
     return 1

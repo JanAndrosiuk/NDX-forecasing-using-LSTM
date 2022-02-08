@@ -75,10 +75,12 @@ def technical_indicators(ohlcv_path="data/OHLC_NDX.csv"):
 def concatenate_dfs(df_dir='data_preprocessed/', df_ohlcv='data/OHLC_NDX.csv', *args):
     """
     Concatenate all of the .csv files in the given directory
-    :param df_dir: Data Frame directory
-    :param exclude: Exclude file names from the list of paths
+    :param df_dir: Data Frames directory
+    :param df_ohlcv: DataFrame with OHLCV data (by default in data/)
+    :param args: Exclude file names from the list of paths
     :return: Combined Dataframe without NaN values
     """
+
     paths = [df_dir + x for x in os.listdir(df_dir) if x not in args]
     li = []
     for path in paths:
@@ -94,8 +96,15 @@ def concatenate_dfs(df_dir='data_preprocessed/', df_ohlcv='data/OHLC_NDX.csv', *
     return 1
 
 
-def transform_target(dataset_path='dataset.csv', target_column='Close', threshold=threshold):
+def transform_target(dataset_path='dataset.csv', target_column='Close', thres=threshold):
+    """
+    Transforms target variable to 3 classes qualitative variable {-1, 0, 1}
+    :param dataset_path: Path to dataset with the target variable
+    :param target_column: Name of the target variable in the dataset
+    :param thres: Threshold - below the absolute value of the threshold assume that target value equals to 0
+    :return: Dataframe with resulting 'target' column
+    """
     df = pd.read_csv(dataset_path)
     df['diff'] = df[target_column].pct_change(1)
-    df['target'] = df['diff'].apply(lambda x: 1 if x > threshold else (-1 if x < -threshold else 0))
+    df['target'] = df['diff'].apply(lambda x: 1 if x > thres else (-1 if x < -thres else 0))
     return df

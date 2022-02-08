@@ -1,10 +1,10 @@
 from parameters import *
 import numpy as np
 from tqdm import tqdm
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 
 
-def create_windows(input_matrix, closes, dates, targets):
+def create_windows(input_matrix, closes, dates, targets, print_set_shapes=True):
     """
     Split the dataset into windows in order to perform rolling LSTM approach
     The function returns a dictionary consisting:
@@ -15,6 +15,7 @@ def create_windows(input_matrix, closes, dates, targets):
     :param closes: an array of closing prices
     :param dates: an array of dates
     :param targets: target variable array
+    :param print_set_shapes: whether shape of train and test sets should be printed, off by default
     """
 
     X, y, X_test, y_test = [], [], [], []
@@ -36,16 +37,16 @@ def create_windows(input_matrix, closes, dates, targets):
 
         # for training periods:
         for j in range(i-train_period, i, 1):
-            X_transformed = scaler.transform(input_matrix[j-lookback:j, :].copy())
+            X_transformed = scaler.transform(input_matrix[j-lookback:j, :])
             X_buf.append(X_transformed)
-            y_buf.append([targets[j].copy()])
+            y_buf.append([[targets[j].copy()]])
             dates_train_buf.append(dates[j])
             closes_train_buf.append(closes[j].copy())
 
         # for test periods:
         for k in range(i, i+test_period, 1):
-            X_test_buf.append(scaler.transform(input_matrix[k-lookback:k, :].copy()))
-            y_test_buf.append([targets[k].copy()])
+            X_test_buf.append(scaler.transform(input_matrix[k-lookback:k, :]))
+            y_test_buf.append([[targets[k].copy()]])
             dates_test_buf.append(dates[k])  # equals to shape of dates
             closes_test_buf.append(closes[k].copy())
 
@@ -62,7 +63,7 @@ def create_windows(input_matrix, closes, dates, targets):
     # change to numpy arrays from list of lists and save them to dictionary
     windows_dict = {
         'X': np.asarray(X),
-        'y': np.asarray(y),
+        'y': np.asarray(y, dtype=np.float),
         'X_test': np.asarray(X_test),
         'y_test': np.asarray(y_test),
         'closes_train': np.asarray(closes_train),
@@ -71,4 +72,11 @@ def create_windows(input_matrix, closes, dates, targets):
         'dates_test': np.asarray(dates_test),
         'scalers': np.asarray(scalers)
     }
+
+    if print_set_shapes:
+        print(
+            [windows_dict['X'].shape, windows_dict['y'].shape],
+            [windows_dict['X_test'].shape, windows_dict['y_test'].shape]
+        )
+
     return windows_dict

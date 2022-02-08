@@ -1,12 +1,12 @@
-from parameters import *  # import model parameters from parameters.py
+from parameters import *
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers, metrics
+from tensorflow.keras import layers
+from tensorflow.keras.layers import Dense, LSTM, Dropout
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM
 
 
-def model_builder(X):
+def model_builder(X, timesteps=lookback, n_feat=len(features)):
     """
     A function building the sequential Keras model
     model_builder parameters are described in parameters.py script
@@ -16,25 +16,25 @@ def model_builder(X):
     model = tf.keras.Sequential([
         layers.LSTM(  # input layer
             units,
-            batch_input_shape=(batch, X.shape[2], X.shape[3]),
+            batch_input_shape=(batch, timesteps, n_feat),
             stateful=True,
             dropout=dropout,
             return_sequences=True  # pass hidden layer outputs to the next LSTM layer
         ),
         layers.LSTM(  # 1st hidden layer
-            units, batch_input_shape=(batch, X.shape[2], X.shape[3]),
+            units, batch_input_shape=(batch, timesteps, n_feat),
             activation=act, dropout=dropout, stateful=True, return_sequences=True
         ),
         layers.LSTM(  # 2nd hidden layer
-            units, batch_input_shape=(batch, X.shape[2], X.shape[3]),
+            units, batch_input_shape=(batch, timesteps, n_feat),
             activation=act, dropout=dropout, stateful=True, return_sequences=False
         ),
         # layers.LSTM(  # 3rd hidden layer
-        #     units, batch_input_shape=(batch, X.shape[2], X.shape[3]),
+        #     units, batch_input_shape=(batch, timesteps, n_feat),
         #     activation=act, dropout=dropout, stateful=True, return_sequences=False
         # ),
         # layers.LSTM(  # 4th hidden layer
-        #     units, batch_input_shape=(batch, X.shape[2], X.shape[3]),
+        #     units, batch_input_shape=(batch, timesteps, n_feat),
         #     activation=act, dropout=dropout, stateful=True, return_sequences=False
         # ),
         layers.Dense(1)  # Output layer
