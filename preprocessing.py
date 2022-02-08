@@ -1,3 +1,4 @@
+from parameters import *
 import pandas as pd
 import os
 import talib
@@ -6,7 +7,7 @@ import talib
 def icsa_shift(icsa_path='data/ICSA.csv', ohlcv_path='data/OHLC_NDX.csv'):
     """
     Load and shift the Initial Claims time series
-    Initial Claims are published on Thursdays, but are refering to last Saturday
+    Initial Claims are published on Thursdays, but are referring to last Saturday
     That is why they require shifting in order not to commit forward looking bias
     Also ICSA values are discreet, they need to be forward filled with OHLCV data as the reference
     """
@@ -56,10 +57,13 @@ def technical_indicators(ohlcv_path="data/OHLC_NDX.csv"):
         'OBV': talib.OBV(ohlcv.Close, ohlcv.Volume),
         'CCI': talib.CCI(ohlcv.High, ohlcv.Low, ohlcv.Close, timeperiod=14)
     }
+
+    # Create a dataframe from TI dictionary
     df_ti = pd.DataFrame(ti_dict, index=ohlcv.index)
     del ti_dict
     del ohlcv
 
+    # Save Technical Indicators dataframe
     if not os.path.isdir('data_preprocessed/'):
         os.mkdir('data_preprocessed/')
     df_ti.to_csv('data_preprocessed/technical_indicators.csv', index=False)
@@ -68,23 +72,30 @@ def technical_indicators(ohlcv_path="data/OHLC_NDX.csv"):
     return 1
 
 
-def concatenate_dfs(df_dir='data_preprocessed/', exclude=['']):
+def concatenate_dfs(df_dir='data_preprocessed/', df_ohlcv='data/OHLC_NDX.csv', *args):
     """
     Concatenate all of the .csv files in the given directory
     :param df_dir: Data Frame directory
     :param exclude: Exclude file names from the list of paths
-    :return: Combined Dataframe withour NaN values
+    :return: Combined Dataframe without NaN values
     """
-    paths = [df_dir + x for x in os.listdir(df_dir) if x not in exclude]
+    paths = [df_dir + x for x in os.listdir(df_dir) if x not in args]
     li = []
     for path in paths:
         df_buf = pd.read_csv(path)
         li.append(df_buf)
     del df_buf
+    li.append(pd.read_csv(df_ohlcv))
     df_res = pd.concat(li, axis=1)
     df_res.dropna(inplace=True)
     del li
-    df_res.to_csv("dataset.csv", index=False)
-    return df_res
+    df_res.to_csv('dataset.csv', index=False)
+    del df_res
+    return 1
 
 
+def transform_target(dataset_path='dataset.csv', target_column='Close', threshold=threshold):
+    df = pd.read_csv(dataset_path)
+    df['diff'] = df[target_column].pct_change(1)
+    df['target'] = df['diff'].apply(lambda x: 1 if x > threshold else (-1 if x < -threshold else 0))
+    return df
