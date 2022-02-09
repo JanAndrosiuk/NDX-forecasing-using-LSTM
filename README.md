@@ -29,7 +29,7 @@ Here I present the wrapper for evaluating rolling stacked LSTM model on historic
 
 ## Remarks
 
-Although the method didn't yield very significant remarks, it may serve as the base template for more extensive analysis.
+Although the method didn't yield very significant results in terms of potential investment returns, it may serve as the base template for more extensive analysis.
 
 Further improvements may include:
 
