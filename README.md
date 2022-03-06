@@ -36,7 +36,7 @@ Further improvements may include:
 - [ ] Averaging the results from many runtimes (random seed cannot be currently set due to the large amount of stochastic processes)
 - [ ] Hyperparameters tuning between windows
 - [ ] Including genetic algorithm / hillclimb algorithm in hyperparameter tuning between windows
-- [ ] Hadling real time data
+- [ ] Handling real time data
 
 ## License
 
