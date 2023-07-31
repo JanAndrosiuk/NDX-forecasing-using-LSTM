@@ -1,13 +1,13 @@
 ## About the Project
 
-Here I present the wrapper for evaluating rolling stacked LSTM model on historical financial data. The default model uses Nasdaq100 index data between 01-10-1985 and 11-01-2021 (*data/OHLC_NDX.csv*). Aparth from the candlestick data (OHLCV), it also uses *TA-Lib* library for technical indicators.
+Rolling LSTM modelling framework for candlestick data with an addition of technical indicators.
 
-## Specific requirements
-
-- Tensorflow (with GPU acceleration enabled, preferably) and other python libraries listed in `requirements.txt`
-- TA-Lib library [[installation]](https://blog.quantinsti.com/install-ta-lib-python/)
-- Financial time series data - candle stick data [[example source - yahoo finance]](https://finance.yahoo.com/quote/%5ENDX/history?p=%5ENDX)
-- Initial Claims time series data - [[source - Federal Reserve Bank of St. Louis]](https://fred.stlouisfed.org/series/ICSA)
+## Requirements
+- common python packages: `pip install -r requirements.txt` 
+- **Tensorflow** python package (preferably with GPU acceleration)
+- **TA-Lib** python package [[installation]](https://blog.quantinsti.com/install-ta-lib-python/)
+- Example financial time series data: (NDX OHLCV candlestick) [[yahoo finance]](https://finance.yahoo.com/quote/%5ENDX/history?p=%5ENDX)
+- Initial Claims time series data [[Initial Claims - Federal Reserve Bank of St. Louis]](https://fred.stlouisfed.org/series/ICSA)
 
 ## Description of modules
 
@@ -29,14 +29,11 @@ Here I present the wrapper for evaluating rolling stacked LSTM model on historic
 
 ## Remarks
 
-Although the method didn't yield very significant results in terms of potential investment returns, it may serve as the base template for more extensive analysis.
-
-Further improvements may include:
+Further improvements to be included:
 
 - [ ] Averaging the results from many runtimes (random seed cannot be currently set due to the large amount of stochastic processes)
-- [ ] Hyperparameters tuning between windows
-- [ ] Including genetic algorithm / hillclimb algorithm in hyperparameter tuning between windows
-- [ ] Handling real time data
+- [ ] Hyper-param tuning between windows
+- [ ] Real time approach
 
 ## License
 
