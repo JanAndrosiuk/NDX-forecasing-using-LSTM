@@ -10,23 +10,7 @@ Rolling LSTM modelling framework for candlestick data with an addition of techni
 - Initial Claims time series data [[Initial Claims - Federal Reserve Bank of St. Louis]](https://fred.stlouisfed.org/series/ICSA)
 
 ## Description of modules
-
-`parameters.py` - set model parameters regarding name of the model, LSTM parameters, train and test lengths, used features, etc.
-
-`preprocessing.py` - adding technical indicators data and processes Initial Claims data. After that it combines all of the data frames to *data_preprocessed/*
-
-`splitWindows.py` - splits the data into equal sized chunks prepared for the rolling LSTM, calculating performance metrics, and visualizations
-
-`buildModel.py` - compiles the stacked LSTM model framework
-
-`modelFitPredict.py` - trains the model, and generates predictions for each window. After that, saves the results to *results/*
-
-`performanceMetrics.py` - calculates and saves performance metrics regarding hypothetical investment returns
-
-`visualizeResults.py` - visualizations. E.g. Equity Line for each time step
-
-`main.py` - combines all the modules
-
+tbd
 ## Remarks
 
 Further improvements to be included:
