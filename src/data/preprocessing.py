@@ -10,6 +10,7 @@ class TrainPrep:
         self.setup = Setup()
         self.config = self.setup.config
         self.logger = logging.getLogger("Input Prep")
+        self.logger.addHandler(logging.StreamHandler())
         self.icsa_df_raw_path = self.setup.ROOT_PATH + self.config["raw"]["IcsaRawDF"]
         self.candle_df_raw_path = self.setup.ROOT_PATH + self.config["raw"]["CandleRawDF"]
 
@@ -137,11 +138,13 @@ class TrainPrep:
 
     def transform_target(self, df) -> int:
         """
-        Transforms target variable to 3-class qualitative variable {-1, 0, 1}
+        Transforms Close prices variable to 3-class qualitative variable {-1, 0, 1}
         if abs(x) < threshold => target value equals to 0
         """
         var_target = self.config["model"]["VarTarget"]
         thres = float(self.config["model"]["TargetThreshold"])
-        df["Target"] = df[var_target].pct_change(1).apply(lambda x: 1 if x > thres else (-1 if x < -thres else 0))
+        df[var_target] = df["Close"].pct_change(1).apply(
+            lambda x: 1 if x > thres else (-1 if x < -thres else 0)
+        )
 
         return 0

@@ -17,6 +17,7 @@ class RollingLSTM:
         self.setup = Setup()
         self.config = self.setup.config
         self.logger = logging.getLogger("Fit Predict")
+        self.logger.addHandler(logging.StreamHandler())
         self.icsa_df_raw_path = self.setup.ROOT_PATH + self.config["raw"]["IcsaRawDF"]
         with open(self.config["prep"]["WindowSplitDict"], 'rb') as handle:
             self.window_dict = pickle.load(handle)
@@ -59,14 +60,16 @@ class RollingLSTM:
             # build model
             self.logger.info(f'Building the model')
             model = self.model_builder()
-            self.logger.info(f'{model.summary()}')
+
+            # print model summary
+            model.summary(print_fn=self.logger.info)
 
             # Fit and predict for each window
             for i in range(self.x_train.shape[0]):
 
                 # TRAIN (FIT) model for each epoch
                 # history = current_model.fit(
-                #     input_X[i], target_X[i],
+                #     x_train[i], y_train[i],
                 #     epochs=_epochs, batch_size=batch,
                 #     verbose=0, shuffle=False, validation_split=0.1,
                 #     callbacks=[history]
@@ -80,11 +83,12 @@ class RollingLSTM:
                         verbose=0, shuffle=False,
                         callbacks=[history]
                     )
-                    model.reset_states()
 
                 self.predictions.append(
                     model.predict(self.x_test[i], batch_size=self.params["batch_size_test"], verbose=0)
                 )
+
+                model.reset_states()
 
                 progress_bar.update(1)
 

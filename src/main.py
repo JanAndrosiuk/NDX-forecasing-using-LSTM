@@ -9,21 +9,21 @@ import src.model as m
 def main():
 
     # Preprocessing
-    # prep = pr.TrainPrep()
-    # prep.prep_icsa()
-    # prep.prep_tis()
-    # prep.join_inputs()
+    prep = pr.TrainPrep()
+    prep.prep_icsa()
+    prep.prep_tis()
+    prep.join_inputs()
 
     # Data split into train-test windows
-    # ws = pr.WindowSplit()
-    # ws.generate_windows()
+    ws = pr.WindowSplit()
+    ws.generate_windows()
 
     # Fit, Predict, save predictions
-    # fp = m.RollingLSTM()
-    # # fp.model_fit_predict()
-    # fp.save_results()
+    fp = m.RollingLSTM()
+    fp.model_fit_predict()
+    fp.save_results()
 
-    # # Calculate and save performance metrics
+    # Calculate and save performance metrics
     metrics = m.PerformanceMetrics()
     metrics.load_latest_eval_data()
     metrics.calculate_metrics()

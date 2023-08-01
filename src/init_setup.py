@@ -1,6 +1,7 @@
 import os
 import configparser
 import logging
+import time
 
 
 class Setup:
@@ -30,11 +31,14 @@ class Setup:
         self.config = configparser.ConfigParser()
         self.config.read(self.CONFIG_PATH)
 
+        if not os.path.isdir("reports/logs/"):
+            os.mkdir("reports/logs/")
         logging.basicConfig(
-            # filename="../reports/logs/logger_"+time.strftime("%Y%m%d-%H%M%S")+".log",
+            filename=f'reports/logs/logger_{time.strftime("%Y%m%d-%H%M%S")}.log',
             level=int(self.config["logger"]["LoggerLevel"]),
             format="%(asctime)s %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
         self.logger = logging.getLogger("Config")
+        self.logger.addHandler(logging.StreamHandler())
         self.logger.info(f"Root Path: {self.ROOT_PATH}")

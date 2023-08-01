@@ -2,8 +2,8 @@ from src.init_setup import *
 import os
 import pickle
 import numpy as np
+from collections import Counter
 import json
-from termcolor import colored
 
 
 class PerformanceMetrics:
@@ -11,9 +11,10 @@ class PerformanceMetrics:
         self.setup = Setup()
         self.config = self.setup.config
         self.logger = logging.getLogger("Performance Metrics")
+        self.logger.addHandler(logging.StreamHandler())
         self.eval_data = None
         self.eval_data_timestamp = None
-        self.threshold = float(self.config["model"]["TargetThreshold"])
+        self.pred_thres = float(self.config["model"]["PredictionThreshold"])
         self.tr_cost = float(self.config["evaluation"]["TransactionCost"])
 
     def calculate_metrics(self):
@@ -24,7 +25,14 @@ class PerformanceMetrics:
 
         # Load evaluation data for performance metrics
         self.load_latest_eval_data()
-        returns_array = self.returns(self.eval_data["Pred"].values, self.eval_data["Real"].values)[0]
+        returns_array, inside_thres_count, positions_array = (
+            self.returns(self.eval_data["Pred"].values, self.eval_data["Real"].values)
+        )
+        self.logger.info(
+            f'Out of {returns_array.shape[0]} observations, there were {inside_thres_count} '
+            + f'predictions under threshold of {self.pred_thres}')
+        pos_counter = Counter(positions_array)
+        self.logger.info(f'Positions:\n [Long]: {pos_counter[1]}, [Short]: {pos_counter[-1]}')
         equity_line = self.eq_line(returns_array, self.eval_data["Real"].values[0])
 
         # Save performance statistics to a dictionary
@@ -44,11 +52,11 @@ class PerformanceMetrics:
             json.dump(metrics, fp, indent=4, sort_keys=False)
 
         # Print results
-        print(colored("[ARC_BH]", 'blue'), metrics['[ARC_BH]'])
-        print(colored("[ARC_EQ]", 'blue'), metrics['[ARC_EQ]'])
-        print(colored("[ASD_EQ]", 'blue'), metrics['[ASD_EQ]'])
-        print(colored("[IR_EQ]", 'blue'), metrics['[IR_EQ]'])
-        print(colored("[MLD_EQ]", 'blue'), metrics['[MLD_EQ]'])
+        self.logger.info(f'[ARC_BH]:    {metrics["[ARC_BH]"]}')
+        self.logger.info(f'[ARC_EQ]:    {metrics["[ARC_EQ]"]}')
+        self.logger.info(f'[ASD_EQ]:    {metrics["[ASD_EQ]"]}')
+        self.logger.info(f'[IR_EQ]:     {metrics["[IR_EQ]"]}')
+        self.logger.info(f'[MLD_EQ]:    {metrics["[MLD_EQ]"]}')
 
         return equity_line
 
@@ -68,60 +76,75 @@ class PerformanceMetrics:
 
         return 0
 
-    def returns(self, predictions, actual_values):
+    def returns(self, predictions: np.array, actual_values: np.array) -> tuple:
         """
         Calculate returns from investment based on predictions for price change, and actual values
         used params:
-            - threshold required to consider a prediction as reliable or not
+            - threshold required to consider a prediction as reliable or not (0 by default)
             - transaction cost of changing the investment position. Counts double.
+
+        table of possible cases:
+        | previous | current | threshold    | decision   |
+        |----------|---------|--------------|------------|
+        | L        | L       | abs(x)>thres | L (keep)   |
+        | L        | L       | abs(x)<thres | L (keep)   |
+        | L        | S       | abs(x)>thres | S (change) |
+        | L        | S       | abs(x)<thres | L (keep)   |
+        | S        | L       | abs(x)>thres | L (change) |
+        | S        | L       | abs(x)<thres | S (keep)   |
+        | S        | S       | abs(x)>thres | S (keep)   |
+        | S        | S       | abs(x)<thres | S (keep)   |
 
         :param predictions: array of values between [-1, 1]
         :param actual_values: array of actual values
         :return: returns array, counter of transactions below threshold, array of position indicators
         """
-        positions = [1]  # store positions (1 for long, 0 for stay, -1 for short), first is always long
+        positions = [1]  # store positions (1 for long, -1 for short), first is long by default
         counter = 0  # count positions inside the threshold
         returns_array = []  # output array
-        for i in range(actual_values.shape[0]):  # for i in actual values
+        for i in range(1, actual_values.shape[0], 1):  # for i in actual values
 
-            # first position is always long
-            if i == 0:
-                continue
+            # If Previous long
+            if positions[i-1] == 1:
 
-            # if prediction is outside of threshold and isn't the first one
-            elif (predictions[i] > self.threshold or predictions[i] < -self.threshold) and (i != 0):
+                # If current long => threshold doesn't matter, keep long
+                if predictions[i] > 0:
+                    returns_array.append(actual_values[i] - actual_values[i - 1])
+                    positions.append(1)
 
-                # LONG BUY
-                if predictions[i] > self.threshold:
+                # If current short => check threshold
+                elif predictions[i] < 0:
 
-                    # if previous was long, don't include the transaction cost
-                    if positions[-1] == 1:
-                        returns_array.append(actual_values[i] - actual_values[i - 1])
-                        positions.append(1)
-
-                    # if previous was short, include the transaction cost for changing the position
-                    else:
-                        returns_array.append(actual_values[i] - actual_values[i - 1] - 2 * self.tr_cost)
-                        positions.append(1)
-
-                # SHORT SELL
-                elif predictions[i] < -self.threshold:
-
-                    # if previous was short, don't include transactions cost
-                    if positions[-1] == -1 and i != 1:
-                        returns_array.append(actual_values[i - 1] - actual_values[i])
-                        positions.append(-1)
-
-                    # if previous was long, include the transaction cost for changing the position
-                    else:
+                    # If abs(x) > threshold => position change long->short
+                    if abs(predictions[i]) > self.pred_thres:
                         returns_array.append(actual_values[i - 1] - actual_values[i] - 2 * self.tr_cost)
                         positions.append(-1)
 
-            # if predictions is inside threshold, but isn't the first one
-            else:
-                counter += 1
-                returns_array.append(0)
-                positions.append(0)
+                    # If abs(x) < threshold => long position unchanged
+                    elif abs(predictions[i]) < self.pred_thres:
+                        returns_array.append(actual_values[i] - actual_values[i - 1])
+                        positions.append(1)
+
+            # If Previous short
+            elif positions[i-1] == -1:
+
+                # If current short => threshold doesn't matter, keep short
+                if predictions[i] < 0:
+                    returns_array.append(actual_values[i - 1] - actual_values[i])
+                    positions.append(-1)
+
+                # If current long => check threshold
+                elif predictions[i] > 0:
+
+                    # If abs(x) > threshold => position change short->long
+                    if abs(predictions[i]) > self.pred_thres:
+                        returns_array.append(actual_values[i] - actual_values[i - 1] - 2 * self.tr_cost)
+                        positions.append(1)
+
+                    # If abs(x) < threshold => short position unchanged
+                    elif abs(predictions[i]) < self.pred_thres:
+                        returns_array.append(actual_values[i - 1] - actual_values[i])
+                        positions.append(-1)
 
         return np.asarray(returns_array), counter, positions
 
@@ -161,10 +184,10 @@ class PerformanceMetrics:
     @staticmethod
     def diff_array(values_array: np.array, cost: float = 0) -> np.array:
         """
-        Calculates dicrete differences as percentages of the previous value
+        Calculates discrete differences as percentages of the previous value
         :param values_array: Real prices array.
         :param cost: Constant cost for each timestep
-        :return: np.array
+        :return: Differentiated array
         """
         results_array = []
         for i in range(values_array.shape[0]):

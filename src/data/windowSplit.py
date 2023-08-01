@@ -11,10 +11,11 @@ class WindowSplit:
     def __init__(self) -> None:
         self.setup = Setup()
         self.config = self.setup.config
-        self.logger = logging.getLogger("Window split")
+        self.logger = logging.getLogger("Window Split")
+        self.logger.addHandler(logging.StreamHandler())
         self.params = {
             "target": self.config["model"]["VarTarget"],
-            "features": self.config["model"]["Features"].split(','),
+            "features": self.config["model"]["Features"].split(', '),
             "lookback": int(self.config["model"]["Lookback"]),
             "train_window": int(self.config["model"]["TrainWindow"]),
             "test_window": int(self.config["model"]["TestWindow"])
