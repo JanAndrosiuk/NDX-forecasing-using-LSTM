@@ -65,6 +65,7 @@ class RollingLSTM:
             model.summary(print_fn=self.logger.info)
 
             # Fit and predict for each window
+            self.logger.info(f'Fitting the model, saving predictions')
             for i in range(self.x_train.shape[0]):
 
                 # TRAIN (FIT) model for each epoch

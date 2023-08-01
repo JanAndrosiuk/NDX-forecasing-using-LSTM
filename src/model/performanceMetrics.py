@@ -32,7 +32,7 @@ class PerformanceMetrics:
             f'Out of {returns_array.shape[0]} observations, there were {inside_thres_count} '
             + f'predictions under threshold of {self.pred_thres}')
         pos_counter = Counter(positions_array)
-        self.logger.info(f'Positions:\n [Long]: {pos_counter[1]}, [Short]: {pos_counter[-1]}')
+        self.logger.info(f'Positions: [Long]: {pos_counter[1]}, [Short]: {pos_counter[-1]}')
         equity_line = self.eq_line(returns_array, self.eval_data["Real"].values[0])
 
         # Save performance statistics to a dictionary
@@ -148,8 +148,7 @@ class PerformanceMetrics:
 
         return np.asarray(returns_array), counter, positions
 
-    @staticmethod
-    def eq_line(returns_array, _n_value):
+    def eq_line(self, returns_array, _n_value):
         """
         Calculate the equity line of investment
         Equity Line informs about the change of accumulated capital
@@ -165,6 +164,15 @@ class PerformanceMetrics:
         # For each daily investment return, add (the current equity value + daily change) to the array
         for i, x in enumerate(returns_array):
             equity_array.append(equity_array[i] + x)
+
+        # Save Equity Line array for visualization module
+        output_dir = self.setup.ROOT_PATH + self.config["prep"]["DataOutputDir"]
+        if not os.path.isdir(output_dir):
+            os.mkdir(output_dir)
+        eq_line_path = f'{self.config["prep"]["DataOutputDir"]}eq_line_{self.eval_data_timestamp}.pkl'
+        self.logger.info(f'Saving Equity Line array: {eq_line_path}')
+        with open(eq_line_path, 'wb') as handle:
+            pickle.dump(np.asarray(equity_array), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         return np.asarray(equity_array)
 

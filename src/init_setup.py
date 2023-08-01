@@ -41,4 +41,4 @@ class Setup:
         )
         self.logger = logging.getLogger("Config")
         self.logger.addHandler(logging.StreamHandler())
-        self.logger.info(f"Root Path: {self.ROOT_PATH}")
+        self.logger.debug(f"Root Path: {self.ROOT_PATH}")
