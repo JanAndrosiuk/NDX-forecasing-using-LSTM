@@ -19,12 +19,14 @@ def main():
     # ws.generate_windows()
 
     # Fit, Predict, save predictions
-    fp = m.RollingLSTM()
-    # fp.model_fit_predict()
-    fp.save_results()
+    # fp = m.RollingLSTM()
+    # # fp.model_fit_predict()
+    # fp.save_results()
 
     # # Calculate and save performance metrics
-    # equity_line = calculate_metrics()
+    metrics = m.PerformanceMetrics()
+    metrics.load_latest_eval_data()
+    metrics.calculate_metrics()
 
     # # Visualize results and save those visualizations
     # pred_hist()

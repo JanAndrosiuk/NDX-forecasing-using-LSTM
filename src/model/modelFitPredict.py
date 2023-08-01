@@ -192,8 +192,11 @@ class RollingLSTM:
         }
 
         # Save model description to .json
+        report_dir = self.setup.ROOT_PATH + self.config["prep"]["ReportDir"]
+        if not os.path.isdir(report_dir):
+            os.mkdir(report_dir)
         with open(
-                f'{self.config["prep"]["DataOutputDir"]}model_config_{timestamp}.json', "w"
+                f'{report_dir}model_config_{timestamp}.json', "w"
         ) as fp:
             json.dump(model_desc, fp, indent=4, sort_keys=False)
 
