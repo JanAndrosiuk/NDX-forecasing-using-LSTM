@@ -48,6 +48,15 @@ Rolling LSTM modelling framework for stock data prediction using candlestick dat
 </p>
 
     This approach utilizes lookback period which allows the model to train on small batches of recent data.
+    At the end, the code with default config should generate arrays with following dimensions:
+    Train window (features, targets): (N, train, look_back, n_feat), (N, train, look_forward, n_targets)
+    Test window (features, targets): (N, test, look_back, n_feat), (N, test, look_forward, n_targets)
+    where:
+    - N                  = resulting number of train-test windows
+    - look_back          = look-back period for feature matrix in each train window
+    - look_forward       = how many days ahead should the model predict the target (default = 1) (target period in diagram above)
+    - n_feat, n_targets  = number of features / targets in joined dataset
+    - train, test        = train, test periods
 
 *Output: window split dictionary (pkl): `config[prep][WindowSplitDict]` -> `data/input/window_split.pkl`*
 
