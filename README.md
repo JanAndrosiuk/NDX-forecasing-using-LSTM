@@ -64,7 +64,7 @@ Rolling LSTM modelling framework for stock data prediction using candlestick dat
 - *model configuration (json): `reports/model_config_<timestamp>.json`*
 
 
-**3.1 `src.model.performanceMetrics`**
+**3.1. `src.model.performanceMetrics`**
 
 *Input: data-to-evaluate (pkl): `data/output/model_eval_data_<timestamp>.pkl`*
 
@@ -79,7 +79,7 @@ Rolling LSTM modelling framework for stock data prediction using candlestick dat
 - *Equity Line array (pkl): `data/output/eq_line_<timestamp>.pkl`*
 
 
-**4 `src.visualization.plotResults`**
+**4. `src.visualization.plotResults`**
 
 *Input:* 
 - *data-to-evaluate (pkl): `data/output/model_eval_data_<timestamp>.pkl`*
@@ -87,7 +87,8 @@ Rolling LSTM modelling framework for stock data prediction using candlestick dat
 - *model configuration (json): `reports/model_config_<timestamp>.json`*
 - *Performance metrics dictionary (json): `reports/performance_metrics_<timestamp>.json`*
 - *Equity Line array (pkl): `data/output/eq_line_<timestamp>.pkl`*
-
+  
+[comment]: <> (This is a comment, it will not be included)
 
     Visualizes results. 
     Includes information about model configuration, comparison between real vs predicted data, and performance metrics.
