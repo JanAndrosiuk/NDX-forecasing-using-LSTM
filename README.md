@@ -58,6 +58,10 @@ Rolling LSTM modelling framework for stock data prediction using candlestick dat
     - n_feat, n_targets  = number of features / targets in joined dataset
     - train, test        = train, test periods
 
+    Default settings example:
+    Train window dimensions (features, targets): (70, 504, 63, 19), (70, 504, 1, 1)
+    Test window dimensions (features, targets): (70, 126, 63, 19), (70, 126, 1, 1)
+
 *Output: window split dictionary (pkl): `config[prep][WindowSplitDict]` -> `data/input/window_split.pkl`*
 
 **3. `src.model.modelFitPredict`**
