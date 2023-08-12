@@ -1,4 +1,5 @@
 from src.init_setup import *
+import sys
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -21,7 +22,11 @@ class WindowSplit:
             "test_window": int(self.config["model"]["TestWindow"])
         }
         self.df_joined_path = self.setup.ROOT_PATH + self.config["prep"]["JoinedDfPkl"]
-        self.df_joined_tmp = pd.read_pickle(self.df_joined_path)
+        try:
+            self.df_joined_tmp = pd.read_pickle(self.df_joined_path)
+        except FileNotFoundError as fnf: 
+            print(f'Could not find pickled of joined dataset, expected: {self.config["prep"]["JoinedDfPkl"]}')
+            sys.exit(1)
         self.x_raw = self.df_joined_tmp[self.params["features"]].values
         self.y_raw = self.df_joined_tmp[self.params["target"]].values
         self.logger.info(f"X, y shape before split: {[self.x_raw.shape, self.y_raw.shape]}")

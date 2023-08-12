@@ -1,4 +1,5 @@
 from src.init_setup import *
+import sys
 import os
 import pickle
 import numpy as np
@@ -65,7 +66,11 @@ class PerformanceMetrics:
         pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files
                    if ("model_eval_data" in f and f.endswith(".pkl"))]
         self.logger.debug(f'Found pickles: {pickles}')
-        latest_file = max(pickles, key=os.path.getmtime)
+        try: 
+            latest_file = max(pickles, key=os.path.getmtime)
+        except ValueError as ve:
+            print("No file available. Please rerun the whole process / load data first.")
+            sys.exit(1)
         self.logger.info(f"Found latest eval data pickle: {latest_file}")
 
         # Save timestamp from the filename in a static way

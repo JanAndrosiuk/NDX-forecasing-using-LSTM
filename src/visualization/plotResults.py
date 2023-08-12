@@ -1,4 +1,5 @@
 from src.init_setup import *
+import sys
 import os
 import pickle
 import numpy as np
@@ -15,7 +16,7 @@ class Plots:
         self.logger.addHandler(logging.StreamHandler())
         self.eval_data = None
         self.timestamp = None
-        self.model_config_dict = None
+        self.model_config_dict, self.perf_metr_dict = None, None
         self.eq_line_array = None
         self.window_dict = None
         self.vis_dir = self.config["prep"]["VisualizationsDir"]
@@ -28,7 +29,11 @@ class Plots:
         pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files
                    if ("model_eval_data" in f and f.endswith(".pkl"))]
         self.logger.debug(f'Found pickles: {pickles}')
-        latest_file = max(pickles, key=os.path.getmtime)
+        try: 
+            latest_file = max(pickles, key=os.path.getmtime)
+        except ValueError as ve:
+            print("No file available. Please rerun the whole process / load data first.")
+            sys.exit(1)
 
         # Save timestamp to read other files from the run
         self.timestamp = latest_file[-20:-4]
@@ -47,6 +52,12 @@ class Plots:
         self.logger.info(f"Loading model config json: {model_config_dict_path}")
         with open(model_config_dict_path, 'rb') as handle:
             self.model_config_dict = json.load(handle)
+        
+        # Load peroformance metrics dictionary
+        perf_metr_dict_path = f'{self.config["prep"]["ReportDir"]}performance_metrics_{self.timestamp}.json'
+        self.logger.info(f"Loading performance metrics json: {perf_metr_dict_path}")
+        with open(perf_metr_dict_path, 'rb') as handle:
+            self.perf_metr_dict = json.load(handle)
 
         # Load model equity line
         model_eqline_dict_path = f'{self.config["prep"]["DataOutputDir"]}eq_line_{self.timestamp}.pkl'
@@ -91,7 +102,7 @@ class Plots:
 
         # Load model parameters and attach them to the plot
         txt = ''''''
-        for k, v in self.model_config_dict.items():
+        for k, v in self.perf_metr_dict.items():
             txt += str(k) + ": " + str(v) + '\n'
 
         # Plot the equity line
