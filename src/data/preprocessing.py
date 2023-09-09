@@ -124,7 +124,7 @@ class TrainPrep:
         # Transform y_train to qualitative variable
         self.logger.info(f"Transforming target variable")
         self.transform_target(df_joined)
-
+        
         self.logger.info(f"Joined dataset dim (no header or date index): {df_joined.shape}")
 
         # Save pickle and csv
@@ -143,8 +143,16 @@ class TrainPrep:
         """
         var_target = self.config["model"]["VarTarget"]
         thres = float(self.config["model"]["TargetThreshold"])
-        df[var_target] = df["Close"].pct_change(1).apply(
-            lambda x: 1 if x > thres else (-1 if x < -thres else 0)
-        )
-
+        df[var_target] = df["Close"].pct_change(1) 
+        
+        # Apply threshold:
+        # .apply(lambda x: 1 if x > thres else (-1 if x < -thres else 0))
+        
+        # Make target to be binary-cross-entropy compatibles => from [-1,1] to [0,1]:
+        # .apply(lambda x: x/2+0.5)
+        
+        # Shift features one day backwards, so that for X(t2) the prediction pct_change(t2->t3) is made.
+        df.loc[:, df.columns != var_target] = df.loc[:, df.columns != var_target].shift(-1)
+        df.drop(df.tail(1).index, inplace=True)
+        
         return 0
