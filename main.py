@@ -19,7 +19,7 @@ def main():
 
     # Fit, Predict, save predictions
     fp = mod.RollingLSTM()
-    fp.model_fit_predict()
+    fp.model_fit_predict_multiprocess()
     fp.save_results()
 
     # # Get performance metrics

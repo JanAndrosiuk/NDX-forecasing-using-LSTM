@@ -1,14 +1,19 @@
 from src.init_setup import *
-from tqdm import tqdm
-import numpy as np
-import pandas as pd
-import tensorflow as tf
-from tensorflow.keras import layers
-from tensorflow.keras.layers import Dense, LSTM, Dropout
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.callbacks import History, EarlyStopping, ModelCheckpoint
-import keras_tuner
-from keras_tuner.tuners import RandomSearch
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+import multiprocessing as mp
+from multiprocessing import Process, Manager, Pool
+from tqdm import tqdm # type: ignore
+import numpy as np # type: ignore
+import pandas as pd # type: ignore
+import pynvml # type: ignore
+import tensorflow as tf # type: ignore
+from tensorflow.keras import layers # type: ignore
+from tensorflow.keras.layers import Dense, LSTM, Dropout # type: ignore
+from tensorflow.keras.models import Sequential # type: ignore
+from tensorflow.keras.callbacks import History, EarlyStopping, ModelCheckpoint # type: ignore
+import keras_tuner # type: ignore
+from keras_tuner.tuners import RandomSearch # type: ignore
 import json
 import pickle
 import time
@@ -25,6 +30,7 @@ class RollingLSTM:
         with open(self.config["prep"]["WindowSplitDict"], 'rb') as handle:
             self.window_dict = pickle.load(handle)
         self.logger.info(f"Loaded data dictionary!")
+        self.logger.info(f'GPU DETECTED: [{tf.test.is_gpu_available(cuda_only=True)}]')
         self.logger.info(f"Train window dimensions (features, targets): {self.window_dict['x_train'].shape}, "
                          f"{self.window_dict['y_train'].shape}")
         self.logger.info(f"Test window dimensions (features, targets): {self.window_dict['x_test'].shape}, "
@@ -57,80 +63,104 @@ class RollingLSTM:
         for item in self.params.items(): self.logger.info(f"{item}")
         self.predictions = []
 
-    def model_fit_predict(self) -> int:
+    def model_fit_predict(self, i, shared_pred_dict): # shared_pred_dict
         """
         Training example was implemented according to machine-learning-mastery forum
         The function takes data from the dictionary returned from splitWindows.create_windows function
         https://machinelearningmastery.com/stateful-stateless-lstm-time-series-forecasting-python/
         """
+        
+        windows_count = self.x_train.shape[0]
+        start_time = time.time()
 
-        # For each train-test windoww
-        with tqdm(total=self.x_train.shape[0], desc="[Cross Window Progress Bar]") as progress_bar:
+        # Hyperparameter tuning
+        # self.logger.info("Building a model to tune")
+        tuner = RandomSearch(
+            self.model_builder
+            , objective="val_loss"
+            , max_trials = self.params["tune_trials"]
+            , directory = "models", overwrite = True
+            , project_name = f"model_window_{i}"
+        )
+        if i == 0: tuner.search_space_summary()
+        
+        # self.logger.info("[{i}/{windows_count}] Tuning the model")
+        if i==0:
+            self.logger.info(f"Train window dimensions (features, targets): {self.x_train.shape}, " + f"{self.y_train.shape}")
+            validation_set_shapes = (self.x_train[i][-self.params["validation_window"]:].shape, self.y_train[i][-self.params["validation_window"]:].shape)
+            self.logger.info(f"Validation window dimensions (features, targets): {validation_set_shapes[0]}, " + f"{validation_set_shapes[1]}")
+        tuner.search(
+            self.x_train[i][:-self.params["validation_window"]]
+            , self.y_train[i][:-self.params["validation_window"]]
+            , validation_data = (
+                self.x_train[i][-self.params["validation_window"]:]
+                , self.y_train[i][-self.params["validation_window"]:]
+            )
+            , epochs = self.params["epochs"]
+            , batch_size=self.params["batch_size_validation"] # it has to be validation one since there is no other way to specify, and obviously batch size <= sample size
+            , shuffle = False
+            , verbose = 1
+        )
+        optimal_hp = tuner.get_best_hyperparameters(1)[0] # num_trials arg -> how robust should the tune process be to random seed
+        # self.logger.info(f"[{i}/{windows_count}] Hyperparams picked by Random Search: {optimal_hp.values}. Fitting the tuned model")
+        
+        # Build the tuned model and train it; use early stopping for epochs
+        tuned_model = tuner.hypermodel.build(optimal_hp)
+        es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=2*self.params["epochs"])
+        history = tuned_model.fit(
+            self.x_train[i][:-self.params["validation_window"]]
+            , self.y_train[i][:-self.params["validation_window"]]
+            , validation_data = (
+                self.x_train[i][-self.params["validation_window"]:]
+                , self.y_train[i][-self.params["validation_window"]:]
+            )
+            , epochs=self.params["epochs"]
+            , batch_size=self.params["batch_size_train"]
+            , shuffle=False
+            , verbose=1
+            , callbacks=[es]
+        )
 
-            # Save model History for error metrics
-            history = History()
+        # generate array of predictions from ith window and save it to dictionary (shared between processes)
+        shared_pred_dict[i] = tuned_model.predict(self.x_test[i], batch_size=self.params["batch_size_test"], verbose=0)
+        # current_predictions = tuned_model.predict(self.x_test[i], batch_size=self.params["batch_size_test"], verbose=0)
 
-            # build and return model
-            # self.logger.info(f'Building the model')
-            # model = self.model_builder()
+        # log status
+        # self.logger.info(f'[{i}/{windows_count}] FINISHED, EXEC TIME: {time.time() - start_time}')
 
-            # print model summary
-            # model.summary(print_fn=self.logger.info)
+        # return current_predictions
+        return 0
 
-            # Fit and predict for each window
-            self.logger.info(f'Fitting the model, saving predictions')
+    def model_fit_predict_multiprocess(self):
+        
+        mp.set_start_method('spawn', force=True)
+        windows_count = self.x_train.shape[0]
+
+        # Create separate process for each window. Save predictions to a dictionary shared between processes.
+        with Manager() as manager:
+            shared_pred_dict = manager.dict()
+            processes = []
             for i in range(self.x_train.shape[0]):
-                
-                # Hyperparameter tuning
-                self.logger.info("Building a model to tune")
-                tuner = RandomSearch(
-                    self.model_builder
-                    , objective="val_loss"
-                    , max_trials = self.params["tune_trials"]
-                    , directory = "models", overwrite = True
-                    , project_name = f"model_window_{i}"
-                )
-                tuner.search_space_summary()
-                
-                x_train = self.x_train[i][:-self.params["validation_window"]]
-                y_train = self.y_train[i][:-self.params["validation_window"]]
-                x_val = self.x_train[i][-self.params["validation_window"]:]
-                y_val = self.y_train[i][-self.params["validation_window"]:]
-                
-                self.logger.info("Tuning the model")
-                self.logger.info(f"Train window dimensions (features, targets): {x_train.shape}, " + f"{y_train.shape}")
-                self.logger.info(f"Validation window dimensions (features, targets): {x_val.shape}, " + f"{y_val.shape}")
-                tuner.search(
-                    x_train, y_train
-                    , validation_data = (x_val, y_val)
-                    , epochs = self.params["epochs"]
-                    , batch_size=self.params["batch_size_validation"] # it has to be validation one since there is no other way to specify, and obviously batch size <= sample size
-                    , shuffle = False
-                )
-                optimal_hp = tuner.get_best_hyperparameters(1)[0] # num_trials arg -> how robust should the tune process be to random seed
-                self.logger.info(f"Hyperparams picked by Random Search: {optimal_hp.values}")
-                
-                # Build the tuned model and train it; use early stopping for epochs
-                tuned_model = tuner.hypermodel.build(optimal_hp)
-                es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=2*self.params["epochs"])
-                history = tuned_model.fit(
-                    x_train, y_train
-                    , validation_data = (x_val, y_val)
-                    , epochs=self.params["epochs"]
-                    , batch_size=self.params["batch_size_train"]
-                    , shuffle=False
-                    , verbose=1
-                    , callbacks=[es]
-                )
+                p = Process(target=self.model_fit_predict, args=(i, shared_pred_dict))  # Passing the list
+                processes.append(p)
+                start_time = time.time()
+                p.start()
+                p.join()
+                self.logger.info(f'[{i}/{windows_count}] FINISHED, TOTAL FINISHED: [{len(shared_pred_dict)}/{windows_count}] [{i}]-th EXEC TIME: {time.time() - start_time}')
+                self.get_gpu_mem_usage(i)
+            self.predictions = [shared_pred_dict[key] for key in sorted(shared_pred_dict.keys())]
 
-                self.predictions.append(
-                    tuned_model.predict(self.x_test[i], batch_size=self.params["batch_size_test"], verbose=0)
-                )
-
-                # Reset weight matrices between each recalibration window
-                tuned_model.reset_states()
-
-                progress_bar.update(1)
+        # with Pool(processes=1) as pool: # safe option; 1 by 1
+        # # self.predictions = pool.map(self.model_fit_predict, [i for i in range(self.x_train.shape[0])])
+        # # self.predictions = [ent for sublist in self.predictions for ent in sublist]
+        #     for i in range(self.x_train.shape[0]):
+        #         curr_pred = pool.apply_async(self.model_fit_predict, [i])
+        #         self.predictions.append(curr_pred.get())
+        #         curr_pred.wait()
+        #         # [result.wait() for result in results]
+        #         # pool.close()
+        #         # pool.join()
+        # self.predictions = [x for sublist in self.predictions for x in sublist]
 
         # Save predictions
         self.logger.info(f'Saving predictions')
@@ -141,7 +171,7 @@ class RollingLSTM:
             pickle.dump(np.asarray(self.predictions), handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         return 0
-
+    
     def model_builder(self, hp) -> Sequential:
         """
         A function building the sequential Keras model
@@ -254,3 +284,9 @@ class RollingLSTM:
             json.dump(model_desc, fp, indent=4, sort_keys=False)
 
         return 0
+
+    def get_gpu_mem_usage(self, i) -> None:
+        pynvml.nvmlInit()
+        h = pynvml.nvmlDeviceGetHandleByIndex(0)
+        info = pynvml.nvmlDeviceGetMemoryInfo(h)
+        self.logger.info(f"POST [{i}] GPU memory usage: {np.round(info.used/info.total*100, 2)}%")
