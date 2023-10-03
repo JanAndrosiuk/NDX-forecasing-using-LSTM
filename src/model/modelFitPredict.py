@@ -12,6 +12,7 @@ from tensorflow.keras import layers # type: ignore
 from tensorflow.keras.layers import Dense, LSTM, Dropout # type: ignore
 from tensorflow.keras.models import Sequential # type: ignore
 from tensorflow.keras.callbacks import History, EarlyStopping, ModelCheckpoint # type: ignore
+import tensorboard
 import keras_tuner # type: ignore
 from keras_tuner.tuners import RandomSearch # type: ignore
 import json
@@ -26,6 +27,7 @@ class RollingLSTM:
         self.logger = logging.getLogger("Fit Predict")
         self.logger.addHandler(logging.StreamHandler())
         print = self.logger.info
+        self.tensorboard_logger = self.config["logger"]["TensorboardLoggerPath"]
         self.icsa_df_raw_path = self.setup.ROOT_PATH + self.config["raw"]["IcsaRawDF"]
         with open(self.config["prep"]["WindowSplitDict"], 'rb') as handle:
             self.window_dict = pickle.load(handle)
@@ -72,6 +74,9 @@ class RollingLSTM:
         
         windows_count = self.x_train.shape[0]
         start_time = time.time()
+        
+        log_dir = self.tensorboard_logger # + time.strftime("%Y-%m-%d_%H-%M-%S")
+        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, write_graph=True)
 
         # Hyperparameter tuning
         # self.logger.info("Building a model to tune")
@@ -99,6 +104,7 @@ class RollingLSTM:
             , epochs = self.params["epochs"]
             , batch_size=self.params["batch_size_validation"] # it has to be validation one since there is no other way to specify, and obviously batch size <= sample size
             , shuffle = False
+            , callbacks=[tensorboard_callback]
             , verbose = 1
         )
         optimal_hp = tuner.get_best_hyperparameters(1)[0] # num_trials arg -> how robust should the tune process be to random seed
@@ -106,7 +112,7 @@ class RollingLSTM:
         
         # Build the tuned model and train it; use early stopping for epochs
         tuned_model = tuner.hypermodel.build(optimal_hp)
-        es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=2*self.params["epochs"])
+        es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=self.params["epochs"])
         history = tuned_model.fit(
             self.x_train[i][:-self.params["validation_window"]]
             , self.y_train[i][:-self.params["validation_window"]]
@@ -118,7 +124,7 @@ class RollingLSTM:
             , batch_size=self.params["batch_size_train"]
             , shuffle=False
             , verbose=1
-            , callbacks=[es]
+            , callbacks=[es, tensorboard_callback]
         )
 
         # generate array of predictions from ith window and save it to dictionary (shared between processes)
