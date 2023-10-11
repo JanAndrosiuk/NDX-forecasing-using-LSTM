@@ -22,7 +22,7 @@ def main():
     fp.model_fit_predict_multiprocess()
     fp.save_results()
 
-    # # Get performance metrics
+    # Get performance metrics
     metrics = mod.PerformanceMetrics()
     metrics.load_latest_eval_data()
     metrics.calculate_metrics()
