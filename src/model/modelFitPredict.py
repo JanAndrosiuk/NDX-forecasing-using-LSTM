@@ -40,7 +40,7 @@ class RollingLSTM:
             self.window_dict['x_train'], self.window_dict['y_train'], self.window_dict['x_test']
         )
         for key in self.config["model"]: self.logger.info(f"{key}: {self.config['model'][key]}")
-        self.early_stopping = 2.5e-4
+        self.early_stopping_min_delta = 0.0
         self.predictions = []
         self.timestamp = time.strftime("%Y-%m-%d_%H-%M")
 
@@ -71,7 +71,7 @@ class RollingLSTM:
             self.logger.info(f"Train window dimensions (features, targets): {self.x_train.shape}, " + f"{self.y_train.shape}")
             validation_set_shapes = (self.x_train[i][-validation_window_size:].shape, self.y_train[i][-validation_window_size:].shape)
             self.logger.info(f"Validation window dimensions (features, targets): {validation_set_shapes[0]}, " + f"{validation_set_shapes[1]}")
-        es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=3, min_delta=self.early_stopping)
+        es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=3, restore_best_weights = True, min_delta=self.early_stopping_min_delta)
         tuner.search(
             self.x_train[i][:-validation_window_size]
             , self.y_train[i][:-validation_window_size]
@@ -169,12 +169,20 @@ class RollingLSTM:
             , "Adadelta"  : tf.keras.optimizers.Adadelta(learning_rate=hp_lr)
         }
         
-        if problem == "regression"      :   hp_loss_function = loss_fun_regression[hp.Choice("loss_fun", values=self.config["model"]["LossFunctionRegression"].split(', '))]
-        elif problem == "classification":   hp_loss_function = loss_fun_classification[hp.Choice("loss_fun", values=self.config["model"]["LossFunctionClassification"].split(', '))]
-        hp_optimizer        = available_optimizers[hp.Choice("optimizer", self.config["model"]["Optimizer"].split(', '))]
-        hp_units            = hp.Int("units", min_value=int(self.config["model"]["LSTMUnits"]), max_value=int(self.config["model"]["LSTMUnitsMax"]), step=16)
-        hp_hidden_layers    = hp.Int("hidden_layers", min_value=int(self.config["model"]["HiddenLayersMin"]), max_value=int(self.config["model"]["HiddenLayersMax"]), step=16)
-        hp_dropout          = hp.Float("dropout", min_value=float(self.config["model"]["DropoutRateMin"]), max_value=float(self.config["model"]["DropoutRateMax"]), step=0.05) 
+        if problem == "regression"      :   
+            hp_loss_fun_name    = hp.Choice("loss_fun", values=self.config["model"]["LossFunctionRegression"].split(', '))
+            hp_loss_fun         = loss_fun_regression[hp_loss_fun_name]
+        elif problem == "classification":   
+            hp_loss_fun_name    = hp.Choice("loss_fun", values=self.config["model"]["LossFunctionClassification"].split(', '))
+            hp_loss_fun         = loss_fun_classification[hp_loss_fun_name]
+        hp_optimizer            = available_optimizers[hp.Choice("optimizer", self.config["model"]["Optimizer"].split(', '))]
+        hp_units                = hp.Int("units", min_value=int(self.config["model"]["LSTMUnitsMin"]), max_value=int(self.config["model"]["LSTMUnitsMax"]), step=32)
+        hp_hidden_layers        = hp.Int("hidden_layers", min_value=int(self.config["model"]["HiddenLayersMin"]), max_value=int(self.config["model"]["HiddenLayersMax"]), step=1)
+        hp_dropout              = hp.Float("dropout", min_value=float(self.config["model"]["DropoutRateMin"]), max_value=float(self.config["model"]["DropoutRateMax"]), step=0.05)
+        self.early_stopping_min_delta = {
+            "MSE": float(self.config["model"]["LossMinDeltaMSE"]), 
+            "MAPE": float(self.config["model"]["LossMinDeltaMAPE"])
+            }[hp_loss_fun_name]
         
         # Sequential model definition:
         layer_list = []
@@ -196,7 +204,7 @@ class RollingLSTM:
         model = tf.keras.Sequential(layer_list)
         model.compile(
             optimizer = hp_optimizer
-            , loss = hp_loss_function  
+            , loss = hp_loss_fun  
         )
 
         return model
