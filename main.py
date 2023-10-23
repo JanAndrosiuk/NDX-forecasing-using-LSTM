@@ -8,19 +8,19 @@ import src.visualization as vis
 def main():
 
     # Preprocessing
-    # prep = pr.TrainPrep()
-    # prep.prep_icsa()
-    # prep.prep_tis()
-    # prep.join_inputs()
+    prep = pr.TrainPrep()
+    prep.prep_icsa()
+    prep.prep_tis()
+    prep.join_inputs()
 
-    # # Data split into train-test windows
-    # ws = pr.WindowSplit()
-    # ws.generate_windows()
+    # Data split into train-test windows
+    ws = pr.WindowSplit()
+    ws.generate_windows()
 
-    # # Fit, Predict, save predictions
-    # fp = mod.RollingLSTM()
-    # fp.model_fit_predict_multiprocess()
-    # fp.save_results()
+    # Fit, Predict, save predictions
+    fp = mod.RollingLSTM()
+    fp.model_fit_predict_multiprocess()
+    fp.save_results()
 
     # Get performance metrics
     metrics = mod.PerformanceMetrics()
