@@ -152,7 +152,7 @@ class TrainPrep:
         # .apply(lambda x: x/2+0.5)
         
         # Shift features one day backwards, so that for X(t2) the prediction pct_change(t2->t3) is made.
-        df.loc[:, df.columns != var_target] = df.loc[:, df.columns != var_target].shift(-1)
+        df[var_target] = df[var_target].shift(-1)
         df.drop(df.tail(1).index, inplace=True)
         
         return 0

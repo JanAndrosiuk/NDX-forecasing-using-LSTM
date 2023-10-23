@@ -62,7 +62,7 @@ class WindowSplit:
 
             # normalizing data, saving the scaler (only for input data, target data doesn't require normalization)
             scaler = MinMaxScaler()
-            scaler.fit(self.x_raw[i - self.params["train_window"] - self.params["lookback"]: i, :])
+            scaler.fit(self.x_raw[: i, :])
             scalers.append(scaler)
 
             # training periods:
