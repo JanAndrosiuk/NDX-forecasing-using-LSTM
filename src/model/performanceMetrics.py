@@ -46,7 +46,7 @@ class PerformanceMetrics:
         }
 
         # Save results to .json file
-        report_dir = self.setup.ROOT_PATH + self.config["prep"]["ReportDir"]
+        report_dir = self.setup.ROOT_PATH + self.config["prep"]["ModelMetricsDir"]
         if not os.path.isdir(report_dir):
             os.mkdir(report_dir)
         with open(f'{report_dir}performance_metrics_{self.eval_data_timestamp}.json', 'w') as fp:

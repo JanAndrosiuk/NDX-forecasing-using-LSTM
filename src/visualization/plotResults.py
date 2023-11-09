@@ -48,13 +48,13 @@ class Plots:
             self.window_dict = pickle.load(handle)
 
         # Load model config dictionary
-        model_config_dict_path = f'{self.config["prep"]["ReportDir"]}model_config_{self.timestamp}.json'
-        self.logger.info(f"Loading model config json: {model_config_dict_path}")
-        with open(model_config_dict_path, 'rb') as handle:
-            self.model_config_dict = json.load(handle)
+        # model_config_dict_path = f'{self.config["prep"]["ModelConfigDir"]}model_config_{self.timestamp}.json'
+        # self.logger.info(f"Loading model config json: {model_config_dict_path}")
+        # with open(model_config_dict_path, 'rb') as handle:
+        #     self.model_config_dict = json.load(handle)
         
         # Load peroformance metrics dictionary
-        perf_metr_dict_path = f'{self.config["prep"]["ReportDir"]}performance_metrics_{self.timestamp}.json'
+        perf_metr_dict_path = f'{self.config["prep"]["ModelMetricsDir"]}performance_metrics_{self.timestamp}.json'
         self.logger.info(f"Loading performance metrics json: {perf_metr_dict_path}")
         with open(perf_metr_dict_path, 'rb') as handle:
             self.perf_metr_dict = json.load(handle)
