@@ -138,20 +138,19 @@ class TrainPrep:
 
     def transform_target(self, df) -> int:
         """
-        Transforms Close prices variable to 3-class qualitative variable {-1, 0, 1}
-        if abs(x) < threshold => target value equals to 0
+        Transforms Close prices to target variable
+        If the problem is specified as regression, then shifted percentage change will be the target.
+        In the case of classification: <...>.
         """
         var_target = self.config["model"]["VarTarget"]
-        thres = float(self.config["model"]["TargetThreshold"])
         df[var_target] = df["Close"].pct_change(1) 
         
-        # Apply threshold:
-        # .apply(lambda x: 1 if x > thres else (-1 if x < -thres else 0))
+        if self.config["model"]["Problem"] not in ["classification", "regression"]: 
+            self.logger.error("Unrecognized problem type. Available problem types: Regression/Classification")
+        if self.config["model"]["Problem"] == "classification":
+            df[var_target] = df[var_target].apply(lambda x: 1 if x>1 else 0)
         
-        # Make target to be binary-cross-entropy compatibles => from [-1,1] to [0,1]:
-        # .apply(lambda x: x/2+0.5)
-        
-        # Shift features one day backwards, so that for X(t2) the prediction pct_change(t2->t3) is made.
+        # Shift features one day backwards. Target change t0->t1 is assigned to features X(t1).
         df[var_target] = df[var_target].shift(-1)
         df.drop(df.tail(1).index, inplace=True)
         

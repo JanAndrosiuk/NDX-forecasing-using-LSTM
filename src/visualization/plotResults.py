@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import json
+import shutil
 
 
 class Plots:
@@ -20,23 +21,24 @@ class Plots:
         self.eq_line_array = None
         self.window_dict = None
         self.vis_dir = self.config["prep"]["VisualizationsDir"]
-        if not os.path.isdir(self.vis_dir):
-            os.mkdir(self.vis_dir)
+        if not os.path.isdir(self.vis_dir): os.makedirs(self.vis_dir)
         self.csfont = {'fontname': 'Times New Roman'}
+        self.export_path = ""
 
     def load_latest_data(self) -> int:
         files = os.listdir(self.config["prep"]["DataOutputDir"])
         pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files
                    if ("model_eval_data" in f and f.endswith(".pkl"))]
         self.logger.debug(f'Found pickles: {pickles}')
-        try: 
-            latest_file = max(pickles, key=os.path.getmtime)
+        try: latest_file = max(pickles, key=os.path.getmtime)
         except ValueError as ve:
             print("No file available. Please rerun the whole process / load data first.")
             sys.exit(1)
 
         # Save timestamp to read other files from the run
         self.timestamp = latest_file[-20:-4]
+        self.export_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["ExportDir"]}{self.timestamp}/'
+        if not os.path.isdir(self.export_path): os.mkdir(self.export_path)
 
         # Load evaluation data
         self.logger.info(f"Loading latest eval data pickle: {latest_file}")
@@ -83,6 +85,7 @@ class Plots:
 
         # Save histogram to .png file
         plt.savefig(f'{self.vis_dir}predictions_histogram_{self.timestamp}.png')
+        shutil.copy2(f'{self.vis_dir}predictions_histogram_{self.timestamp}.png', self.export_path)
 
         if show_results:
             plt.show()
@@ -134,6 +137,7 @@ class Plots:
 
         # Save the plot to .png file
         plt.savefig(f'{self.vis_dir}equity_line_{self.timestamp}.png')
+        shutil.copy2(f'{self.vis_dir}equity_line_{self.timestamp}.png', self.export_path)
 
         if show_results:
             plt.show()
