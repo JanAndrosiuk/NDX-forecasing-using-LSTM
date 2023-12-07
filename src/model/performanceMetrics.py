@@ -2,9 +2,11 @@ from src.init_setup import *
 import sys
 import os
 import pickle
+import shutil
 import numpy as np
 from collections import Counter
 import json
+import time
 
 
 class PerformanceMetrics:
@@ -17,6 +19,7 @@ class PerformanceMetrics:
         self.eval_data_timestamp = None
         self.pred_thres = float(self.config["model"]["PredictionThreshold"])
         self.tr_cost = float(self.config["evaluation"]["TransactionCost"])
+        self.export_path = ""
 
     def calculate_metrics(self):
         """
@@ -29,11 +32,9 @@ class PerformanceMetrics:
         returns_array, inside_thres_count, positions_array = (
             self.returns(self.eval_data["Pred"].values, self.eval_data["Real"].values)
         )
-        self.logger.info(
-            f'Out of {returns_array.shape[0]} observations, there were {inside_thres_count} '
-            + f'predictions under threshold of {self.pred_thres}')
         pos_counter = Counter(positions_array)
-        self.logger.info(f'Positions: [Long]: {pos_counter[1]}, [Short]: {pos_counter[-1]}')
+        self.logger.info(f'Inside threshold: [{inside_thres_count}/{returns_array.shape[0]}], under threshold: [{self.pred_thres}/{returns_array.shape[0]}]\n'
+                         f'[Positions] Long: {pos_counter[1]}, Short: {pos_counter[-1]}')
         equity_line = self.eq_line(returns_array, self.eval_data["Real"].values[0])
 
         # Save performance statistics to a dictionary
@@ -46,11 +47,10 @@ class PerformanceMetrics:
         }
 
         # Save results to .json file
-        report_dir = self.setup.ROOT_PATH + self.config["prep"]["ModelMetricsDir"]
-        if not os.path.isdir(report_dir):
-            os.mkdir(report_dir)
-        with open(f'{report_dir}performance_metrics_{self.eval_data_timestamp}.json', 'w') as fp:
+        performance_metrics_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["ModelMetricsDir"]}performance_metrics_{self.eval_data_timestamp}.json'
+        with open(performance_metrics_path, 'w') as fp:
             json.dump(metrics, fp, indent=4, sort_keys=False)
+        shutil.copy2(performance_metrics_path, self.export_path)
 
         # Print results
         self.logger.info(f'[ARC_BH]:    {metrics["[ARC_BH]"]}')
@@ -66,15 +66,15 @@ class PerformanceMetrics:
         pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files
                    if ("model_eval_data" in f and f.endswith(".pkl"))]
         self.logger.debug(f'Found pickles: {pickles}')
-        try: 
-            latest_file = max(pickles, key=os.path.getmtime)
+        try: latest_file = max(pickles, key=os.path.getmtime)
         except ValueError as ve:
-            print("No file available. Please rerun the whole process / load data first.")
+            self.logger.error("No file available. Please rerun the whole process / load data first.")
             sys.exit(1)
         self.logger.info(f"Found latest eval data pickle: {latest_file}")
 
-        # Save timestamp from the filename in a static way
         self.eval_data_timestamp = latest_file[-20:-4]
+        self.export_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["ExportDir"]}{self.eval_data_timestamp}/'
+        if not os.path.isdir(self.export_path): os.mkdir(self.export_path)
 
         with open(latest_file, 'rb') as handle:
             self.eval_data = pickle.load(handle)
@@ -110,7 +110,7 @@ class PerformanceMetrics:
         for i in range(1, actual_values.shape[0], 1):  # for i in actual values
 
             # If Previous long
-            if positions[i-1] == 1:
+            if positions[i-1] in [0, 1]:
 
                 # If current long => threshold doesn't matter, keep long
                 if predictions[i] > 0:
@@ -129,9 +129,13 @@ class PerformanceMetrics:
                     elif abs(predictions[i]) < self.pred_thres:
                         returns_array.append(actual_values[i] - actual_values[i - 1])
                         positions.append(1)
+                
+                else: 
+                    returns_array.append(0)
+                    positions.append(0)
 
             # If Previous short
-            elif positions[i-1] == -1:
+            elif positions[i-1] in [-1, 0]:
 
                 # If current short => threshold doesn't matter, keep short
                 if predictions[i] < 0:
@@ -150,7 +154,11 @@ class PerformanceMetrics:
                     elif abs(predictions[i]) < self.pred_thres:
                         returns_array.append(actual_values[i - 1] - actual_values[i])
                         positions.append(-1)
-
+                
+                else:
+                    returns_array.append(0)
+                    positions.append(0)
+            
         return np.asarray(returns_array), counter, positions
 
     def eq_line(self, returns_array, _n_value):
@@ -165,19 +173,14 @@ class PerformanceMetrics:
         # first value is the initial value of the capital
         equity_array = [_n_value]
 
-        # Walk through every return in returns array
         # For each daily investment return, add (the current equity value + daily change) to the array
-        for i, x in enumerate(returns_array):
-            equity_array.append(equity_array[i] + x)
+        for i, x in enumerate(returns_array): equity_array.append(equity_array[i] + x)
 
-        # Save Equity Line array for visualization module
-        output_dir = self.setup.ROOT_PATH + self.config["prep"]["DataOutputDir"]
-        if not os.path.isdir(output_dir):
-            os.mkdir(output_dir)
-        eq_line_path = f'{self.config["prep"]["DataOutputDir"]}eq_line_{self.eval_data_timestamp}.pkl'
+        eq_line_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["DataOutputDir"]}eq_line_{self.eval_data_timestamp}.pkl'
         self.logger.info(f'Saving Equity Line array: {eq_line_path}')
         with open(eq_line_path, 'wb') as handle:
             pickle.dump(np.asarray(equity_array), handle, protocol=pickle.HIGHEST_PROTOCOL)
+        shutil.copy2(eq_line_path, self.export_path)
 
         return np.asarray(equity_array)
 

@@ -47,8 +47,7 @@ class TrainPrep:
         icsa_df.dropna(subset=['ICSA'], inplace=True)
 
         prep_dir = self.setup.ROOT_PATH + self.config["prep"]["DataPreprocessedDir"]
-        if not os.path.isdir(prep_dir):
-            os.mkdir(prep_dir)
+        if not os.path.isdir(prep_dir): os.mkdir(prep_dir)
         icsa_df.to_csv(self.setup.ROOT_PATH + self.config["prep"]["FFilledIcsaDfCsv"], index=False)
         icsa_df.to_pickle(self.setup.ROOT_PATH + self.config["prep"]["FFilledIcsaDfPkl"])
 
@@ -68,8 +67,7 @@ class TrainPrep:
             'SMA50': talib.SMA(candle_df.Close, 50),
             'EMA20': talib.EMA(candle_df.Close, 20),
             'stoch5': talib.STOCH(candle_df.High, candle_df.Low, candle_df.Close, 5, 3, 0, 3, 0)[0],
-            'ADOSC': talib.ADOSC(candle_df.High, candle_df.Low, candle_df.Close,
-                                 candle_df.Volume, fastperiod=3, slowperiod=10),
+            'ADOSC': talib.ADOSC(candle_df.High, candle_df.Low, candle_df.Close, candle_df.Volume, fastperiod=3, slowperiod=10),
             'MACDhist': talib.MACD(candle_df.Close, fastperiod=12, slowperiod=26, signalperiod=9)[2],
             'WILLR': talib.WILLR(candle_df.High, candle_df.Low, candle_df.Close, timeperiod=14),
             'RSI': talib.RSI(candle_df.Close, timeperiod=14),
@@ -89,8 +87,7 @@ class TrainPrep:
 
         # Save Technical Indicators dataframe
         prep_dir = self.setup.ROOT_PATH + self.config["prep"]["DataPreprocessedDir"]
-        if not os.path.isdir(prep_dir):
-            os.mkdir(prep_dir)
+        if not os.path.isdir(prep_dir): os.mkdir(prep_dir)
         tis_df.to_csv(self.setup.ROOT_PATH + self.config["prep"]["TisDfCsv"], index=False)
         tis_df.to_pickle(self.setup.ROOT_PATH + self.config["prep"]["TisDfPkl"])
 
@@ -129,8 +126,7 @@ class TrainPrep:
 
         # Save pickle and csv
         input_dir = self.setup.ROOT_PATH + self.config["prep"]["DataInputDir"]
-        if not os.path.isdir(input_dir):
-            os.mkdir(input_dir)
+        if not os.path.isdir(input_dir): os.mkdir(input_dir)
         df_joined.to_pickle(self.setup.ROOT_PATH + self.config["prep"]["JoinedDfPkl"])
         df_joined.to_csv(self.setup.ROOT_PATH + self.config["prep"]["JoinedDfCsv"], index=False)
 
@@ -138,21 +134,26 @@ class TrainPrep:
 
     def transform_target(self, df) -> int:
         """
-        Transforms Close prices variable to 3-class qualitative variable {-1, 0, 1}
-        if abs(x) < threshold => target value equals to 0
+        Transforms Close prices to target variable
+        If the problem is specified as regression, then shifted percentage change will be the target.
+        In the case of classification: <...>.
         """
         var_target = self.config["model"]["VarTarget"]
-        thres = float(self.config["model"]["TargetThreshold"])
         df[var_target] = df["Close"].pct_change(1) 
         
-        # Apply threshold:
-        # .apply(lambda x: 1 if x > thres else (-1 if x < -thres else 0))
+        if self.config["model"]["Problem"] not in ["classification", "regression"]: 
+            self.logger.error("Unrecognized problem type. Available problem types: Regression/Classification")
         
-        # Make target to be binary-cross-entropy compatibles => from [-1,1] to [0,1]:
-        # .apply(lambda x: x/2+0.5)
-        
-        # Shift features one day backwards, so that for X(t2) the prediction pct_change(t2->t3) is made.
+        # Shift features one day backwards. Target change t0->t1 is assigned to features X(t1).
         df[var_target] = df[var_target].shift(-1)
+        
+        if self.config["model"]["Problem"] == "classification":
+            target_threshold = float(self.config["model"]["TargetThreshold"])
+            df[var_target] = df[var_target].apply(lambda x: 
+                                                1  if x > target_threshold else (
+                                                -1 if x < -target_threshold
+                                                else 0))
+            self.logger.info(f'Class distribution for defined target threshold: {df[var_target].value_counts()}')
         df.drop(df.tail(1).index, inplace=True)
         
         return 0
