@@ -14,6 +14,7 @@ from tensorflow.keras import layers # type: ignore
 from tensorflow.keras.layers import Dense, LSTM, Dropout # type: ignore
 from tensorflow.keras.models import Sequential # type: ignore
 from tensorflow.keras.callbacks import History, EarlyStopping, ModelCheckpoint # type: ignore
+from keras.utils import to_categorical
 import tensorboard # type: ignore
 import keras_tuner # type: ignore
 from keras_tuner.tuners import RandomSearch # type: ignore
@@ -22,6 +23,9 @@ import json
 import csv
 import pickle
 import time
+import re
+import glob
+import datetime
 
 
 class RollingLSTM:
@@ -60,6 +64,16 @@ class RollingLSTM:
         history = History()
         
         validation_window_size = int(self.config["model"]["ValidationWindow"])
+        if self.config["model"]["Problem"] == "classification":
+            y_train = to_categorical(self.y_train[i][:-validation_window_size], num_classes=3)[:,0,:]
+            y_val = to_categorical(self.y_train[i][-validation_window_size:], num_classes=3)[:,0,:]
+        elif self.config["model"]["Problem"] == "regression":
+            y_train = self.y_train[i][:-validation_window_size]
+            y_val = self.y_train[i][-validation_window_size:]
+        else:
+            logging.error("Wrong problem type! Check config")
+            raise
+
         if i == 0:
             validation_set_shapes = (self.x_train[i][-validation_window_size:].shape, self.y_train[i][-validation_window_size:].shape)
             print(f"TRAIN (features, targets): ({self.x_train.shape}, {self.y_train.shape})\nVAL: ({validation_set_shapes[0]}, {validation_set_shapes[1]})")
@@ -77,11 +91,11 @@ class RollingLSTM:
         print(f"[{i}/{self.x_train.shape[0]}] Evaluating previous model -> previous best parameters")
         tuner_previous_best.search(
             self.x_train[i][:-validation_window_size]
-            , self.y_train[i][:-validation_window_size]
-            , validation_data = (self.x_train[i][-validation_window_size:], self.y_train[i][-validation_window_size:])
+            , y_train
+            , validation_data = (self.x_train[i][-validation_window_size:], y_val)
             , epochs = int(self.config["model"]["Epochs"])
             , batch_size = int(self.config["model"]["BatchSizeValidation"]) # it has to be validation one since there is no other way to specify, and obviously batch size <= sample size
-            , shuffle = False, callbacks = [es, tensorboard_callback], verbose = 0
+            , shuffle = False, callbacks = [es, tensorboard_callback], verbose = 1
         )
         tuner_current = RandomSearch(
             self.model_builder
@@ -92,11 +106,11 @@ class RollingLSTM:
         print(f"[{i}/{self.x_train.shape[0]}] Tuning the model")
         tuner_current.search(
             self.x_train[i][:-validation_window_size]
-            , self.y_train[i][:-validation_window_size]
-            , validation_data = (self.x_train[i][-validation_window_size:], self.y_train[i][-validation_window_size:])
+            , y_train
+            , validation_data = (self.x_train[i][-validation_window_size:], y_val)
             , epochs = int(self.config["model"]["Epochs"])
             , batch_size = int(self.config["model"]["BatchSizeValidation"]) # it has to be validation one since there is no other way to specify, and obviously batch size <= sample size
-            , shuffle = False, callbacks = [es, tensorboard_callback], verbose = 0
+            , shuffle = False, callbacks = [es, tensorboard_callback], verbose = 1
         )
         
         # Compare previous best model and current tuned model, retrieve best hyperparameters
@@ -120,8 +134,8 @@ class RollingLSTM:
         print(f"[{i}/{self.x_train.shape[0]}] Fitting the tuned model")
         tuned_model = tuner_current.hypermodel.build(hp_optimal)
         tuned_model.fit(
-            self.x_train[i][:-validation_window_size], self.y_train[i][:-validation_window_size]
-            , validation_data = (self.x_train[i][-validation_window_size:], self.y_train[i][-validation_window_size:])
+            self.x_train[i][:-validation_window_size], y_train
+            , validation_data = (self.x_train[i][-validation_window_size:], y_val)
             , epochs = int(self.config["model"]["Epochs"]), batch_size = int(self.config["model"]["BatchSizeTrain"])
             , shuffle = False, verbose = 1, callbacks = [es, tensorboard_callback, history]
         )
@@ -132,7 +146,14 @@ class RollingLSTM:
         temp_history_df.to_csv(fir_history_json_path, mode='a', index=False, header=False)
         
         # generate array of predictions from ith window and save it to dictionary (shared between processes)
-        shared_pred_dict[i] = tuned_model.predict(self.x_test[i], batch_size=int(self.config["model"]["BatchSizeTest"]), verbose=0)
+        predictions_array = tuned_model.predict(self.x_test[i], batch_size=int(self.config["model"]["BatchSizeTest"]), verbose=0)
+        if self.config["model"]["Problem"] == "regression": shared_pred_dict[i] = predictions_array
+        elif self.config["model"]["Problem"] == "classification": 
+            classes = [0, 1, -1]
+            shared_pred_dict[i] = [classes[most_probable_class] for most_probable_class in predictions_array.argmax(axis=-1)]
+            print(predictions_array)
+            print(predictions_array.argmax(axis=-1))
+            print(shared_pred_dict[i])
         
         return 0
 
@@ -166,6 +187,7 @@ class RollingLSTM:
             with open(self.config["prep"]["PredictionsArray"], 'wb') as handle: 
                 pickle.dump(np.asarray(self.predictions, dtype=object), handle, protocol=pickle.HIGHEST_PROTOCOL)
             shutil.copy2(history_csv_path, self.export_path)
+            shutil.copy2(f'{self.setup.ROOT_PATH}config.ini', self.export_path)
 
         return 0
     
@@ -199,7 +221,7 @@ class RollingLSTM:
         # Hyperparameters grid
         hp_lr                   = hp.Choice("learning_rate", default=float(hp_default_dict["learning_rate"]), values=[float(x) for x in self.config["model"]["LearningRate"].split(', ')])
         loss_fun_classification = {
-            "Hinge" : tf.keras.losses.Hinge()
+            "categorical_crossentropy" : tf.keras.losses.CategoricalCrossentropy()
         }
         loss_fun_regression = {
             "MAPE"  : tf.keras.losses.MeanAbsolutePercentageError()
@@ -214,34 +236,32 @@ class RollingLSTM:
             hp_loss_fun_name    = hp.Choice("loss_fun", default=hp_default_dict["loss_fun"], values=self.config["model"]["LossFunctionRegression"].split(', '))
             hp_loss_fun         = loss_fun_regression[hp_loss_fun_name]
             hp_activation       = self.config["model"]["ActivationFunctionRegression"]
+            hp_dense_units      = 1
         elif problem == "classification":   
             hp_loss_fun_name    = hp.Choice("loss_fun", default=hp_default_dict["loss_fun"], values=self.config["model"]["LossFunctionClassification"].split(', '))
             hp_loss_fun         = loss_fun_classification[hp_loss_fun_name]
             hp_activation       = self.config["model"]["ActivationFunctionClassification"]
+            hp_dense_units      = 3
         hp_optimizer            = available_optimizers[hp.Choice("optimizer", default=hp_default_dict["optimizer"], values=self.config["model"]["Optimizer"].split(', '))]
         hp_units                = hp.Int("units", default=int(hp_default_dict["units"]), min_value=int(self.config["model"]["LSTMUnitsMin"]), max_value=int(self.config["model"]["LSTMUnitsMax"]), step=32)
         hp_hidden_layers        = hp.Int("hidden_layers", default=int(hp_default_dict["hidden_layers"]), min_value=int(self.config["model"]["HiddenLayersMin"]), max_value=int(self.config["model"]["HiddenLayersMax"]), step=1)
         hp_dropout              = hp.Float("dropout", default=float(hp_default_dict["dropout"]), min_value=float(self.config["model"]["DropoutRateMin"]), max_value=float(self.config["model"]["DropoutRateMax"]), step=0.05)
         self.early_stopping_min_delta = {
             "MSE": float(self.config["model"]["LossMinDeltaMSE"]), 
-            "MAPE": float(self.config["model"]["LossMinDeltaMAPE"])
+            "MAPE": float(self.config["model"]["LossMinDeltaMAPE"]),
+            "categorical_crossentropy": float(self.config["model"]["LossMinDeltaCategoricalCrossEntropy"])
             }[hp_loss_fun_name]
         
-        # Sequential model definition
+        # Sequential model
         layer_list = []
         for _ in range(hp_hidden_layers-1): 
-            layer_list.append(layers.LSTM(
-                hp_units, batch_input_shape=batch_input_shape, stateful=True, dropout=hp_dropout, return_sequences=True
-            ))
+            layer_list.append(layers.LSTM(hp_units, batch_input_shape=batch_input_shape, stateful=True, dropout=hp_dropout, return_sequences=True))
         layer_list.extend([
-            layers.LSTM(hp_units, batch_input_shape=batch_input_shape, dropout=hp_dropout, stateful=True, return_sequences=False)
-            , layers.Dense(3, activation=hp_activation)
-        ]) # logging outputu (przynajmniej na poczatku)
+            layers.LSTM(hp_units, batch_input_shape=batch_input_shape, dropout=hp_dropout, stateful=True, return_sequences=False),
+            layers.Dense(hp_dense_units, activation=hp_activation)])
         model = tf.keras.Sequential(layer_list)
-        model.compile(
-            optimizer = hp_optimizer
-            , loss = hp_loss_fun  
-        )
+        
+        model.compile(optimizer = hp_optimizer, loss = hp_loss_fun  )
 
         return model
 

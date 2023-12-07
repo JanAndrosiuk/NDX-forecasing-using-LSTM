@@ -48,7 +48,6 @@ class PerformanceMetrics:
 
         # Save results to .json file
         performance_metrics_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["ModelMetricsDir"]}performance_metrics_{self.eval_data_timestamp}.json'
-        print(performance_metrics_path)
         with open(performance_metrics_path, 'w') as fp:
             json.dump(metrics, fp, indent=4, sort_keys=False)
         shutil.copy2(performance_metrics_path, self.export_path)
@@ -69,13 +68,12 @@ class PerformanceMetrics:
         self.logger.debug(f'Found pickles: {pickles}')
         try: latest_file = max(pickles, key=os.path.getmtime)
         except ValueError as ve:
-            print("No file available. Please rerun the whole process / load data first.")
+            self.logger.error("No file available. Please rerun the whole process / load data first.")
             sys.exit(1)
         self.logger.info(f"Found latest eval data pickle: {latest_file}")
 
         self.eval_data_timestamp = latest_file[-20:-4]
         self.export_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["ExportDir"]}{self.eval_data_timestamp}/'
-        print(self.export_path)
         if not os.path.isdir(self.export_path): os.mkdir(self.export_path)
 
         with open(latest_file, 'rb') as handle:
@@ -112,7 +110,7 @@ class PerformanceMetrics:
         for i in range(1, actual_values.shape[0], 1):  # for i in actual values
 
             # If Previous long
-            if positions[i-1] == 1:
+            if positions[i-1] in [0, 1]:
 
                 # If current long => threshold doesn't matter, keep long
                 if predictions[i] > 0:
@@ -131,9 +129,13 @@ class PerformanceMetrics:
                     elif abs(predictions[i]) < self.pred_thres:
                         returns_array.append(actual_values[i] - actual_values[i - 1])
                         positions.append(1)
+                
+                else: 
+                    returns_array.append(0)
+                    positions.append(0)
 
             # If Previous short
-            elif positions[i-1] == -1:
+            elif positions[i-1] in [-1, 0]:
 
                 # If current short => threshold doesn't matter, keep short
                 if predictions[i] < 0:
@@ -152,7 +154,11 @@ class PerformanceMetrics:
                     elif abs(predictions[i]) < self.pred_thres:
                         returns_array.append(actual_values[i - 1] - actual_values[i])
                         positions.append(-1)
-
+                
+                else:
+                    returns_array.append(0)
+                    positions.append(0)
+            
         return np.asarray(returns_array), counter, positions
 
     def eq_line(self, returns_array, _n_value):
