@@ -24,12 +24,12 @@ def main():
 
     # Get performance metrics
     metrics = mod.PerformanceMetrics()
-    metrics.load_latest_eval_data()
+    metrics.load_eval_data()
     metrics.calculate_metrics()
 
     # Visualize results
     vs = vis.Plots()
-    vs.load_latest_data()
+    vs.load_performance_data()
     vs.hist()
     vs.equity_line()
 
