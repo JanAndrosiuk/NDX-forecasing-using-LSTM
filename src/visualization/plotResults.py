@@ -25,26 +25,28 @@ class Plots:
         self.csfont = {'fontname': 'Times New Roman'}
         self.export_path = ""
 
-    def load_latest_data(self) -> int:
-        files = os.listdir(self.config["prep"]["DataOutputDir"])
-        pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files
-                   if ("model_eval_data" in f and f.endswith(".pkl"))]
-        self.logger.debug(f'Found pickles: {pickles}')
-        try: latest_file = max(pickles, key=os.path.getmtime)
-        except ValueError as ve:
-            print("No file available. Please rerun the whole process / load data first.")
-            sys.exit(1)
-
-        # Save timestamp to read other files from the run
-        self.timestamp = latest_file[-20:-4]
+    def load_performance_data(self, custom_timestamp=None) -> int:
+        if custom_timestamp is None:
+            files = os.listdir(self.config["prep"]["DataOutputDir"])
+            pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files
+                    if ("model_eval_data" in f and f.endswith(".pkl"))]
+            self.logger.debug(f'Found pickles: {pickles}')
+            try: latest_file = max(pickles, key=os.path.getmtime)
+            except ValueError as ve:
+                print("No file available. Please rerun the whole process / load data first.")
+                sys.exit(1)
+            self.timestamp = latest_file[-20:-4]
+            eval_data_path = f'{self.config["prep"]["DataOutputDir"]}{latest_file}'
+        else:
+            self.timestamp = custom_timestamp
+            eval_data_path = f'{self.config["prep"]["DataOutputDir"]}model_eval_data_{self.timestamp}.pkl'
+            
         self.export_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["ExportDir"]}{self.timestamp}/'
         if not os.path.isdir(self.export_path): os.mkdir(self.export_path)
-
-        # Load evaluation data
-        self.logger.info(f"Loading latest eval data pickle: {latest_file}")
-        with open(latest_file, 'rb') as handle:
+        
+        self.logger.info(f"Loading latest eval data pickle: {eval_data_path}")
+        with open(eval_data_path, 'rb') as handle:
             self.eval_data = pickle.load(handle)
-
         # Load split windows dictionary
         with open(self.config["prep"]["WindowSplitDict"], 'rb') as handle:
             self.window_dict = pickle.load(handle)
@@ -63,6 +65,7 @@ class Plots:
 
         # Load model equity line
         model_eqline_dict_path = f'{self.config["prep"]["DataOutputDir"]}eq_line_{self.timestamp}.pkl'
+        # model_eqline_dict_path = f'reports/export/{self.timestamp}/eq_line_{self.timestamp}.pkl'
         self.logger.info(f"Loading model equity line: {model_eqline_dict_path}")
         with open(model_eqline_dict_path, 'rb') as handle:
             self.eq_line_array = pickle.load(handle)

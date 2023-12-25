@@ -21,28 +21,26 @@ class PerformanceMetrics:
         self.tr_cost = float(self.config["evaluation"]["TransactionCost"])
         self.export_path = ""
 
-    def calculate_metrics(self):
+    def calculate_metrics(self, custom_timestamp=None):
         """
         Calculate ARC (for buy-and-hold strategy and LSTM strategy), ASD, IR, MLD (only for LSTM strategy)
         :return: equity line array for further visualization
         """
 
         # Load evaluation data for performance metrics
-        self.load_latest_eval_data()
-        returns_array, inside_thres_count, positions_array = (
-            self.returns(self.eval_data["Pred"].values, self.eval_data["Real"].values)
+        self.load_eval_data(custom_timestamp)
+        equity_line_array, returns_array = (
+            self.equity_line(self.eval_data["Pred"].values, self.eval_data["Real"].values) 
         )
-        pos_counter = Counter(positions_array)
-        self.logger.info(f'Inside threshold: [{inside_thres_count}/{returns_array.shape[0]}], under threshold: [{self.pred_thres}/{returns_array.shape[0]}]\n'
-                         f'[Positions] Long: {pos_counter[1]}, Short: {pos_counter[-1]}')
-        equity_line = self.eq_line(returns_array, self.eval_data["Real"].values[0])
+        pos_counter = Counter(np.sign(self.eval_data["Pred"].values))
+        self.logger.info(f'[Positions] Long: {pos_counter[1]}, Short: {pos_counter[-1]}, 0: {pos_counter[0]}')
 
         # Save performance statistics to a dictionary
         metrics = {
             "[ARC_BH]": str(np.round(self.arc(self.eval_data["Real"].values) * 100, 2)) + "%",
-            "[ARC_EQ]": str(np.round(self.arc(equity_line) * 100, 2)) + "%",
-            "[ASD_EQ]": str(np.round(self.asd(equity_line), 4)),
-            "[IR_EQ]": str(np.round(self.ir(equity_line), 4)),
+            "[ARC_EQ]": str(np.round(self.arc(equity_line_array) * 100, 2)) + "%",
+            "[ASD_EQ]": str(np.round(self.asd(equity_line_array), 4)),
+            "[IR_EQ]": str(np.round(self.ir(equity_line_array), 4)),
             "[MLD_EQ]": str(np.round(self.mld(returns_array) * 100, 2)) + "% of the year"
         }
 
@@ -51,37 +49,48 @@ class PerformanceMetrics:
         with open(performance_metrics_path, 'w') as fp:
             json.dump(metrics, fp, indent=4, sort_keys=False)
         shutil.copy2(performance_metrics_path, self.export_path)
+        eq_line_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["DataOutputDir"]}eq_line_{self.eval_data_timestamp}.pkl'
+        self.logger.info(f'Saving Equity Line array: {eq_line_path}')
+        with open(eq_line_path, 'wb') as handle:
+            pickle.dump(np.asarray(equity_line_array), handle, protocol=pickle.HIGHEST_PROTOCOL)
+        shutil.copy2(eq_line_path, self.export_path)
 
-        # Print results
         self.logger.info(f'[ARC_BH]:    {metrics["[ARC_BH]"]}')
         self.logger.info(f'[ARC_EQ]:    {metrics["[ARC_EQ]"]}')
         self.logger.info(f'[ASD_EQ]:    {metrics["[ASD_EQ]"]}')
         self.logger.info(f'[IR_EQ]:     {metrics["[IR_EQ]"]}')
         self.logger.info(f'[MLD_EQ]:    {metrics["[MLD_EQ]"]}')
 
-        return equity_line
+        return equity_line_array
 
-    def load_latest_eval_data(self) -> int:
+    def load_eval_data(self, custom_timestamp = None) -> int:
         files = os.listdir(self.config["prep"]["DataOutputDir"])
-        pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files
-                   if ("model_eval_data" in f and f.endswith(".pkl"))]
-        self.logger.debug(f'Found pickles: {pickles}')
-        try: latest_file = max(pickles, key=os.path.getmtime)
-        except ValueError as ve:
-            self.logger.error("No file available. Please rerun the whole process / load data first.")
-            sys.exit(1)
-        self.logger.info(f"Found latest eval data pickle: {latest_file}")
+        
+        if custom_timestamp is None:
+            pickles = [f'{self.config["prep"]["DataOutputDir"]}{f}' for f in files if ("model_eval_data" in f and f.endswith(".pkl"))]
+            try: latest_file = max(pickles, key=os.path.getmtime)
+            except ValueError as ve:
+                self.logger.error("No file available. Please rerun the whole process / load data first.")
+                sys.exit(1)
+            self.logger.info(f"Found latest eval data pickle: {latest_file}")
+            self.eval_data_timestamp = latest_file[-20:-4]
+        else: 
+            self.eval_data_timestamp = custom_timestamp
+            custom_eval_data_path = f'{self.config["prep"]["DataOutputDir"]}model_eval_data_{custom_timestamp}.pkl'
+            self.logger.debug(f'Trying to load eval data: {custom_eval_data_path}')
+            try: 
+                with open(custom_eval_data_path, 'rb') as handle: self.eval_data = pickle.load(handle)
+            except FileNotFoundError as ve: 
+                self.logger.error("Model evaluation data not found.")
+                sys.exit(1)
+            self.logger.info(f"Loaded model evaluation data pickle: {custom_eval_data_path}")
 
-        self.eval_data_timestamp = latest_file[-20:-4]
         self.export_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["ExportDir"]}{self.eval_data_timestamp}/'
         if not os.path.isdir(self.export_path): os.mkdir(self.export_path)
 
-        with open(latest_file, 'rb') as handle:
-            self.eval_data = pickle.load(handle)
-
         return 0
 
-    def returns(self, predictions: np.array, actual_values: np.array) -> tuple:
+    def equity_line(self, predictions: np.array, actual_values: np.array) -> tuple:
         """
         Calculate returns from investment based on predictions for price change, and actual values
         used params:
@@ -104,85 +113,39 @@ class PerformanceMetrics:
         :param actual_values: array of actual values
         :return: returns array, counter of transactions below threshold, array of position indicators
         """
-        positions = [1]  # store positions (1 for long, -1 for short), first is long by default
-        counter = 0  # count positions inside the threshold
-        returns_array = []  # output array
-        for i in range(1, actual_values.shape[0], 1):  # for i in actual values
-
-            # If Previous long
-            if positions[i-1] in [0, 1]:
-
-                # If current long => threshold doesn't matter, keep long
-                if predictions[i] > 0:
-                    returns_array.append(actual_values[i] - actual_values[i - 1])
-                    positions.append(1)
-
-                # If current short => check threshold
-                elif predictions[i] < 0:
-
-                    # If abs(x) > threshold => position change long->short
-                    if abs(predictions[i]) > self.pred_thres:
-                        returns_array.append(actual_values[i - 1] - actual_values[i] - 2 * self.tr_cost)
-                        positions.append(-1)
-
-                    # If abs(x) < threshold => long position unchanged
-                    elif abs(predictions[i]) < self.pred_thres:
-                        returns_array.append(actual_values[i] - actual_values[i - 1])
-                        positions.append(1)
-                
-                else: 
-                    returns_array.append(0)
-                    positions.append(0)
-
-            # If Previous short
-            elif positions[i-1] in [-1, 0]:
-
-                # If current short => threshold doesn't matter, keep short
-                if predictions[i] < 0:
-                    returns_array.append(actual_values[i - 1] - actual_values[i])
-                    positions.append(-1)
-
-                # If current long => check threshold
-                elif predictions[i] > 0:
-
-                    # If abs(x) > threshold => position change short->long
-                    if abs(predictions[i]) > self.pred_thres:
-                        returns_array.append(actual_values[i] - actual_values[i - 1] - 2 * self.tr_cost)
-                        positions.append(1)
-
-                    # If abs(x) < threshold => short position unchanged
-                    elif abs(predictions[i]) < self.pred_thres:
-                        returns_array.append(actual_values[i - 1] - actual_values[i])
-                        positions.append(-1)
-                
-                else:
-                    returns_array.append(0)
-                    positions.append(0)
+        returns_array = []
+        
+        eq_line_array = [actual_values[0]]
+        eq_line_second_return = (actual_values[1] - actual_values[0]) / actual_values[0]
+        if (predictions[0] > 0): eq_line_array.append(eq_line_array[0] * (1 + eq_line_second_return))
+        elif (predictions[0] < 0): eq_line_array.append(eq_line_array[0] * (1 - eq_line_second_return))
+        else: eq_line_array.append(eq_line_array[0])
+        
+        self.logger.debug(f'Real values (B&H) -> First 5: {actual_values[:5]}, Last 5: {actual_values[-5:]}')
+        
+        for i in range(1, actual_values.shape[0]-1, 1):
+            # r = (actual_values[i] - actual_values[i-1])/actual_values[i-1]
+            # print(self.eval_data.iloc[[i]])
+            # print(f'{i} {predictions[i-1]} {predictions[i]} {r} {eq_line_array[i-1]}')
             
-        return np.asarray(returns_array), counter, positions
+            if (predictions[i] == 0): _return_rate = 0 - int(predictions[i-1] == 0) * self.tr_cost
 
-    def eq_line(self, returns_array, _n_value):
-        """
-        Calculate the equity line of investment
-        Equity Line informs about the change of accumulated capital
-        :param returns_array: array of returns from investment
-        :param _n_value: Initial value of capital
-        :return: returns an array where each element represents the capital at the given timestep
-        """
+            # L/L
+            elif (predictions[i-1] >= 0 and predictions[i] > 0): _return_rate = (actual_values[i+1] - actual_values[i]) / actual_values[i] - int(predictions[i] == 0) * self.tr_cost
+            
+            # L/S
+            elif (predictions[i-1] >= 0 and predictions[i] < 0): _return_rate = (actual_values[i] - actual_values[i+1]) / actual_values[i] - 2 * self.tr_cost + int(predictions[i] == 0) * self.tr_cost
+                
+            # S/S
+            elif (predictions[i-1] <= 0 and predictions[i] < 0): _return_rate = (actual_values[i] - actual_values[i+1]) / actual_values[i] - int(predictions[i] == 0) * self.tr_cost
 
-        # first value is the initial value of the capital
-        equity_array = [_n_value]
+            # S/L
+            elif (predictions[i-1] <= 0 and predictions[i] > 0): _return_rate = (actual_values[i+1] - actual_values[i]) / actual_values[i] - 2 * self.tr_cost + int(predictions[i] == 0) * self.tr_cost
 
-        # For each daily investment return, add (the current equity value + daily change) to the array
-        for i, x in enumerate(returns_array): equity_array.append(equity_array[i] + x)
-
-        eq_line_path = f'{self.setup.ROOT_PATH}{self.config["prep"]["DataOutputDir"]}eq_line_{self.eval_data_timestamp}.pkl'
-        self.logger.info(f'Saving Equity Line array: {eq_line_path}')
-        with open(eq_line_path, 'wb') as handle:
-            pickle.dump(np.asarray(equity_array), handle, protocol=pickle.HIGHEST_PROTOCOL)
-        shutil.copy2(eq_line_path, self.export_path)
-
-        return np.asarray(equity_array)
+            returns_array.append(_return_rate)
+            eq_line_array.append(eq_line_array[i] * (1 + _return_rate))
+            
+        return np.asarray(eq_line_array), np.asarray(returns_array)
 
     def asd(self, equity_array, scale=252):
         """
