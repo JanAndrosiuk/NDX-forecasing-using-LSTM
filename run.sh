@@ -1,0 +1,1 @@
+for i in `seq 1 8`; do python main.py; done

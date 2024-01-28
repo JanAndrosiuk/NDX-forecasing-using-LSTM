@@ -37,18 +37,22 @@ class RollingLSTM:
         if not os.path.isdir(self.export_path): os.mkdir(self.export_path)
         self.logger = logging.getLogger("Fit Predict") # type: ignore
         self.logger.addHandler(logging.StreamHandler()) # type: ignore
+        self.logger.info("[[Model Fit & Predict module]]\n")
         print = self.logger.info
         self.tensorboard_logger = self.config["logger"]["TensorboardLoggerPath"]
         
         self.icsa_df_raw_path = self.setup.ROOT_PATH + self.config["raw"]["IcsaRawDF"]
         with open(self.config["prep"]["WindowSplitDict"], 'rb') as handle: self.window_dict = pickle.load(handle)
-        self.logger.info(f'Successfully loaded split dictionary\n'\
+        self.logger.info(f'\nSuccessfully loaded split dictionary\n'\
                          f'GPU DETECTED: [{tf.test.is_gpu_available(cuda_only=True)}]\n'\
                          f'TRAIN (features; targets): ({self.window_dict["x_train"].shape}; {self.window_dict["y_train"].shape})\n'\
-                         f'TEST: ({self.window_dict["x_test"].shape}; {self.window_dict["y_test"].shape})')
+                         f'TEST: ({self.window_dict["x_test"].shape}; {self.window_dict["y_test"].shape})\n')
         self.x_train, self.y_train, self.x_test = (self.window_dict['x_train'], self.window_dict['y_train'], self.window_dict['x_test'])
         
+        self.logger.info(f"Parameters summary:\n{'-'*49}")
         for key in self.config["model"]: self.logger.info(f"{key}: {self.config['model'][key]}")
+        self.logger.info(f"{'-'*49}\n")
+            
         self.early_stopping_min_delta = 0.0
         self.predictions = []
 
@@ -76,7 +80,7 @@ class RollingLSTM:
 
         if i == 0:
             validation_set_shapes = (self.x_train[i][-validation_window_size:].shape, self.y_train[i][-validation_window_size:].shape)
-            print(f"TRAIN (features, targets): ({self.x_train.shape}, {self.y_train.shape})\nVAL: ({validation_set_shapes[0]}, {validation_set_shapes[1]})")
+            print(f"Validation set size: ({validation_set_shapes[0]}, {validation_set_shapes[1]})\n\nSTARTING TRAINING PROCESS\n")
         
         # Validation & Early Stopping setup
         es = EarlyStopping(monitor='val_loss', mode='min', verbose=0, patience=3, restore_best_weights=True, min_delta=self.early_stopping_min_delta)
@@ -282,6 +286,7 @@ class RollingLSTM:
         df_pred_eval.to_csv(f'{self.config["prep"]["DataOutputDir"]}model_eval_data_{self.timestamp}.csv', index=False)
         df_pred_eval.set_index("Date", inplace=True)
         df_pred_eval.to_pickle(f'{self.config["prep"]["DataOutputDir"]}model_eval_data_{self.timestamp}.pkl')
+        self.logger.info("Success\n")
         
         return 0
     

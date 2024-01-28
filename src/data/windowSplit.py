@@ -14,6 +14,7 @@ class WindowSplit:
         self.config = self.setup.config
         self.logger = logging.getLogger("Window Split")
         self.logger.addHandler(logging.StreamHandler())
+        self.logger.info("[[Window split module]]")
         self.params = {
             "target": self.config["model"]["VarTarget"],
             "features": self.config["model"]["Features"].split(', '),
@@ -103,10 +104,8 @@ class WindowSplit:
             'scalers': np.asarray(scalers)
         }
 
-        self.logger.info(f"Train window dimensions (features, targets): {windows_dict['x_train'].shape}, "
-                         f"{windows_dict['y_train'].shape}")
-        self.logger.info(f"Test window dimensions (features, targets): {windows_dict['x_test'].shape}, "
-                         f"{windows_dict['y_test'].shape}")
+        self.logger.info(f"\nTrain window dimensions (features, targets): {windows_dict['x_train'].shape}, "f"{windows_dict['y_train'].shape}")
+        self.logger.info(f"Test window dimensions (features, targets): {windows_dict['x_test'].shape}, "f"{windows_dict['y_test'].shape}\n")
 
         # Pickle the result dictionary
         with open(self.config["prep"]["WindowSplitDict"], 'wb') as handle:

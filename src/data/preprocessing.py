@@ -11,6 +11,7 @@ class TrainPrep:
         self.config = self.setup.config
         self.logger = logging.getLogger("Input Prep")
         self.logger.addHandler(logging.StreamHandler())
+        self.logger.info("[[Preprocessing module]]")
         self.icsa_df_raw_path = self.setup.ROOT_PATH + self.config["raw"]["IcsaRawDF"]
         self.candle_df_raw_path = self.setup.ROOT_PATH + self.config["raw"]["CandleRawDF"]
 
@@ -50,7 +51,8 @@ class TrainPrep:
         if not os.path.isdir(prep_dir): os.mkdir(prep_dir)
         icsa_df.to_csv(self.setup.ROOT_PATH + self.config["prep"]["FFilledIcsaDfCsv"], index=False)
         icsa_df.to_pickle(self.setup.ROOT_PATH + self.config["prep"]["FFilledIcsaDfPkl"])
-
+        
+        self.logger.info("Success\n")
         return 0
 
     def prep_tis(self) -> int:
@@ -91,6 +93,7 @@ class TrainPrep:
         tis_df.to_csv(self.setup.ROOT_PATH + self.config["prep"]["TisDfCsv"], index=False)
         tis_df.to_pickle(self.setup.ROOT_PATH + self.config["prep"]["TisDfPkl"])
 
+        self.logger.info("Success\n")
         return 0
 
     def join_inputs(self) -> int:
@@ -100,11 +103,13 @@ class TrainPrep:
 
         prep_dir = self.setup.ROOT_PATH + self.config["prep"]["DataPreprocessedDir"]
         df_paths = []
+        df_paths_to_print = [self.candle_df_raw_path]
         for f in os.listdir(prep_dir):
             if os.path.isfile(os.path.join(prep_dir, f)) and f.endswith('.pkl'):
+                df_paths_to_print.append(prep_dir+f)
                 df_paths.append(prep_dir+f)
-
-        self.logger.info(f"Joining datasets: {', '.join(map(str, df_paths))}")
+                
+        self.logger.info(f"Joining all datasets")
 
         dfs = [pd.read_csv(self.candle_df_raw_path)]
         for f in df_paths:
@@ -114,7 +119,6 @@ class TrainPrep:
         for df in dfs:
             df["Date"] = pd.to_datetime(df["Date"])
             df.set_index(keys="Date", inplace=True)
-        self.logger.info(f"Datasets dims (no header or date index): {', '.join(map(str, [df.shape for df in dfs]))}")
         df_joined = dfs[0].join(dfs[1:], how="inner")
         df_joined.reset_index(inplace=True)
 
@@ -122,14 +126,16 @@ class TrainPrep:
         self.logger.info(f"Transforming target variable")
         self.transform_target(df_joined)
         
-        self.logger.info(f"Joined dataset dim (no header or date index): {df_joined.shape}")
-
         # Save pickle and csv
         input_dir = self.setup.ROOT_PATH + self.config["prep"]["DataInputDir"]
         if not os.path.isdir(input_dir): os.mkdir(input_dir)
         df_joined.to_pickle(self.setup.ROOT_PATH + self.config["prep"]["JoinedDfPkl"])
         df_joined.to_csv(self.setup.ROOT_PATH + self.config["prep"]["JoinedDfCsv"], index=False)
 
+        self.logger.info("Success\n")
+        self.logger.info(f"Dimensions of joined datasets (no header, no date index):\n\tOHLCV:\t{dfs[0].shape}\t{df_paths_to_print[0]}")
+        self.logger.info(f"\tICSA:\t{dfs[1].shape}\t{df_paths_to_print[1]}\n\tTIs\t{dfs[2].shape}\t{df_paths_to_print[2]}")
+        self.logger.info(f"\tJoined\t{df_joined.shape}\n")
         return 0
 
     def transform_target(self, df) -> int:
